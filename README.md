@@ -1,2 +1,3 @@
 # mind-and-life
-depository for fmri analysis for mind and life project (relationship between empathy and mindfulness)
+depository for mind and life project analysis
+
