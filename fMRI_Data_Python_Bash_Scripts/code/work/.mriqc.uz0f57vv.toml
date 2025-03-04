@@ -1,0 +1,67 @@
+[environment]
+cpu_count = 24
+exec_env = "posix"
+overcommit_policy = "heuristic"
+overcommit_limit = "50%"
+nipype_version = "1.8.6"
+templateflow_version = "23.0.0"
+total_memory = 62.83514404296875
+version = "22.0.6"
+
+[execution]
+ants_float = false
+bids_dir = "/mnt/LSANdata/MindAndLife/fMRIData/subjects"
+bids_database_dir = "/mnt/LSANdata/MindAndLife/fMRIData/code/work/20230903-154809_3f87cb13-c4ef-4a68-ad28-b4d6ac42f1c7/bids_db"
+cwd = "/mnt/LSANdata/MindAndLife/fMRIData/code"
+debug = false
+dry_run = false
+dsname = "<unset>"
+float32 = true
+layout = "BIDS Layout: .../MindAndLife/fMRIData/subjects | Subjects: 38 | Sessions: 0 | Runs: 76"
+log_dir = "/mnt/LSANdata/MindAndLife/fMRIData/subjects/derivatives/logs"
+log_level = 25
+no_sub = false
+output_dir = "/mnt/LSANdata/MindAndLife/fMRIData/subjects/derivatives"
+participant_label = [ "001",]
+pdb = false
+reports_only = false
+resource_monitor = false
+run_uuid = "20230903-154809_3f87cb13-c4ef-4a68-ad28-b4d6ac42f1c7"
+templateflow_home = "/home/md1864/.cache/templateflow"
+upload_strict = false
+verbose_reports = false
+webapi_url = "https://mriqc.nimh.nih.gov/api/v1"
+work_dir = "/mnt/LSANdata/MindAndLife/fMRIData/code/work"
+write_graph = false
+
+[workflow]
+analysis_level = [ "participant",]
+biggest_file_gb = 0.06950854230672121
+deoblique = false
+despike = false
+fd_thres = 0.2
+fd_radius = 50
+fft_spikes_detector = false
+headmask = "BET"
+ica = false
+species = "human"
+template_id = "MNI152NLin2009cAsym"
+
+[nipype]
+crashfile_format = "txt"
+get_linked_libs = false
+local_hash_check = true
+nprocs = 24
+omp_nthreads = 24
+plugin = "MultiProc"
+remove_node_directories = false
+resource_monitor = false
+stop_on_first_crash = true
+
+[workflow.inputs]
+bold = [ "/mnt/LSANdata/MindAndLife/fMRIData/subjects/sub-001/func/sub-001_task-empathy_run-01_bold.nii.gz", "/mnt/LSANdata/MindAndLife/fMRIData/subjects/sub-001/func/sub-001_task-empathy_run-02_bold.nii.gz",]
+T1w = [ "/mnt/LSANdata/MindAndLife/fMRIData/subjects/sub-001/anat/sub-001_acq-highres_T1w.nii.gz",]
+
+[nipype.plugin_args]
+maxtasksperchild = 1
+raise_insufficient = false

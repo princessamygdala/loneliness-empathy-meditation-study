@@ -1,0 +1,15 @@
+Please request raw fMRI data, subject-level, or grouplevel maps by contacting md1864@georgetown.edu. 
+
+Outcome Types 
+1. pain experience (self) 
+2. pain observation (other) 
+3. empathy for pain (multi-voxel pattern similarity) 
+4. empathy for pain (multi-voxel cross classification) 
+5. fearful anticipation experience (self) 
+6. fearful anticipation observation (other) 
+7. empathy for fearful anticipation (multi-voxel pattern similarity) 
+8. empathy for fearful anticipation (multi-voxel cross classification) 
+
+1stlevel_univariate_maps: unthresholded subject-level maps preprocessed in fMRIprep and then produced using AFNI's 3ddeconvolve.
+1stlevel_multivariate_maps: multivariate time series extracted for self and other, and then correlated at each time point for these two conditions (multi-voxel pattern similarity) using rsatoolbox in Python; multivariate time series extracted for self and other and then decoding is performed (multi-voxel cross classification) resulting in AUC minus chance maps. 
+2ndlevel_univariate_and_multivariate_maps: unthresholded group-level ttest maps; unthresholded group-level 3dMVM maps (including behavioral predictors).
