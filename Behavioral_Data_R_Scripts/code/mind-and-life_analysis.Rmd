@@ -1,0 +1,1422 @@
+---
+title: "Loneliness modulates self-reported empathy but not empathic multi-voxel neural response patterns after meditation training"
+author: "Marla Dressel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This script performs analysis for "Loneliness modulates self-reported empathy but not empathic multi-voxel neural response patterns after meditation training". See preregistration for details: https://osf.io/agbu5
+
+# Preliminary Analysis
+
+## 1. Setting up the script
+
+### 1.1. Loading packages
+
+```{r, message = FALSE}
+# chronological order of usage
+library(gt) # advanced tables
+library(dplyr) # %>%
+library(janitor) # adorn_ns
+library(kableExtra)  # apa table stuff
+library(ggplot2) # ggplot
+library(papaja) # theme_apa
+library(gridExtra) # grid.arrange
+library(moments) # skewness
+library(openxlsx) # write.xlsx
+library(reshape2) # cor table
+library(nlme) # lme function
+library(sjPlot) # tab_model
+library(lmtest) #lrtest
+```
+
+### 1.2. Importing the full clean data
+
+```{r, message = FALSE}
+
+# for T2 analysis, we use a wide df. 
+
+path <- "/my/path/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
+
+dfB_noT3 <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3.csv"), row.names = 1)
+dfB_noT3_long <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3_long.csv"), row.names = 1)
+dfB_all_long <- read.csv(file.path(path, "clean/cleandata_fullSample_all_long.csv"), row.names = 1) # for analysis over time 
+
+# Ensure the group variable is a factor and PMR is the reference group (control)
+dfB_noT3$GroupID <- as.factor(dfB_noT3$GroupID)
+dfB_noT3$GroupID <- relevel(dfB_noT3$GroupID, ref = "PMR")
+dfB_noT3_long$GroupID <- as.factor(dfB_noT3_long$GroupID)
+dfB_noT3_long$GroupID <- relevel(dfB_noT3_long$GroupID, ref = "PMR")
+dfB_all_long$GroupID <- as.factor(dfB_all_long$GroupID)
+dfB_all_long$GroupID <- relevel(dfB_all_long$GroupID, ref = "PMR")
+
+```
+
+### 1.3. Importing the scan sample 
+
+```{r, message = FALSE}
+
+dfS_noT3 <- read.csv(file.path(path, "clean/cleandata_scanSample_noT3.csv"), row.names = 1)
+dfS_noT3_long <- read.csv(file.path(path, "clean/cleandata_scanSample_noT3_long.csv"), row.names = 1)
+dfS_noT3_all_long <- read.csv(file.path(path, "clean/cleandata_scanSample_all_long.csv"), row.names = 1)
+
+# Ensure the group variable is a factor and PMR is the reference group (control)
+dfS_noT3$GroupID <- as.factor(dfS_noT3$GroupID)
+dfS_noT3$GroupID <- relevel(dfS_noT3$GroupID, ref = "PMR")
+dfS_noT3_long$GroupID <- as.factor(dfS_noT3_long$GroupID)
+dfS_noT3_long$GroupID <- relevel(dfS_noT3_long$GroupID, ref = "PMR")
+dfS_noT3_all_long$GroupID <- as.factor(dfS_noT3_all_long$GroupID)
+dfS_noT3_all_long$GroupID <- relevel(dfS_noT3_all_long$GroupID, ref = "PMR")
+
+```
+
+## 2. Demographics
+
+### 2.1. Differences in age between samples
+
+```{r, message = FALSE}
+# Create the data frame
+df_age <- as.data.frame(cbind(dfB_noT3$age, dfS_noT3$age))
+colnames(df_age) <- c("dB1", "dB2")
+
+# Calculate means and standard deviations
+mean_dB1 <- mean(df_age$dB1)
+mean_dB2 <- mean(df_age$dB2)
+sd_dB1 <- sd(df_age$dB1)
+sd_dB2 <- sd(df_age$dB2)
+
+# Calculate the standard errors
+se_dB1 <- sd_dB1 / sqrt(length(df_age$dB1))
+se_dB2 <- sd_dB2 / sqrt(length(df_age$dB2))
+
+# Calculate the 95% confidence intervals
+alpha <- 0.05
+t_critical <- qt(1 - alpha / 2, df = length(df_age$dB1) - 1)
+
+ci_dB1_lower <- mean_dB1 - t_critical * se_dB1
+ci_dB1_upper <- mean_dB1 + t_critical * se_dB1
+
+ci_dB2_lower <- mean_dB2 - t_critical * se_dB2
+ci_dB2_upper <- mean_dB2 + t_critical * se_dB2
+
+# Perform the t-test
+t_test <- t.test(df_age$dB1, df_age$dB2)
+
+# Calculate Cohen's d and its confidence interval using compute.es
+if (!require(compute.es)) {
+  install.packages("compute.es")
+  library(compute.es)
+}
+
+n1 <- length(df_age$dB1)
+n2 <- length(df_age$dB2)
+cohens_d <- (mean_dB1 - mean_dB2) / sqrt(((n1 - 1) * sd_dB1^2 + (n2 - 1) * sd_dB2^2) / (n1 + n2 - 2))
+
+es <- tes(t_test$statistic, n1, n2, dig = 3)
+
+# Print the results
+cat("Mean of dB1:", mean_dB1, "\n")
+cat("95% CI for mean of dB1:", ci_dB1_lower, "to", ci_dB1_upper, "\n")
+cat("Mean of dB2:", mean_dB2, "\n")
+cat("95% CI for mean of dB2:", ci_dB2_lower, "to", ci_dB2_upper, "\n")
+print(t_test)
+cat("Cohen's d:", cohens_d, "\n")
+cat("95% CI for Cohen's d:", es$l.d, "to", es$u.d, "\n")
+
+```
+
+### 2.2. Calculate frequencies and percentages for categorical demographic variables.  
+
+##### 2.2.1. Full Sample
+
+```{r, message = FALSE}
+
+library(janitor) # adorn_ns
+# Generating frequency table for age
+age_table <- dfB_noT3 %>%
+  tabyl(agefull, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per age
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Generating frequency table for Gender
+gender_table <- dfB_noT3 %>%
+  tabyl(gender, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per gender
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Generating frequency table for Ethnicity
+ethnicity_table <- dfB_noT3 %>%
+  tabyl(ethnicity, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per ethnicity
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Household Income by GroupID
+income_table <- dfB_noT3 %>%
+  tabyl(income, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per income
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Education by GroupID
+education_table <- dfB_noT3 %>%
+  tabyl(education, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per education
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Education by GroupID
+employment_table <- dfB_noT3 %>%
+  tabyl(employment, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per employment 
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for handedness by GroupID
+handedness_table <- dfB_noT3 %>%
+  tabyl(handedness, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per handedness
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+print(age_table)
+print(gender_table)
+print(ethnicity_table)
+print(education_table)
+print(employment_table)
+print(income_table)
+print(handedness_table)
+
+```
+
+##### 2.2.2. Scan Sample
+
+```{r, message = FALSE}
+###### scan!
+
+# Generating frequency table for age
+age_table_scan <- dfS_noT3 %>%
+  tabyl(agefull, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per age
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Generating frequency table for Gender
+gender_table_scan <- dfS_noT3 %>%
+  tabyl(gender, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per gender
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Generating frequency table for Ethnicity
+ethnicity_table_scan <- dfS_noT3 %>%
+  tabyl(ethnicity, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per ethnicity 
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Household Income by GroupID
+income_table_scan <- dfS_noT3 %>%
+  tabyl(income, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per income
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Education by GroupID
+education_table_scan <- dfS_noT3 %>%
+  tabyl(education, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per education
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Education by GroupID
+employment_table_scan <- dfS_noT3 %>%
+  tabyl(employment, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per employment 
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+# Frequency table for Education by GroupID
+handedness_table_scan <- dfS_noT3 %>%
+  tabyl(handedness, GroupID) %>%
+  adorn_totals("row") %>% # Adds total counts per handedness
+  adorn_totals("col") %>% # Adds total counts per GroupID at the bottom
+  adorn_percentages("col") %>% # Converts counts to percentages by column (GroupID)
+  adorn_pct_formatting(digits = 1) %>%
+  adorn_ns(position = "front")
+
+
+print(age_table_scan)
+print(gender_table_scan)
+print(ethnicity_table_scan)
+print(education_table_scan)
+print(employment_table_scan)
+print(income_table_scan)
+print(handedness_table_scan)
+
+```
+
+### 2.3. Test whether there are significant differences within each demographic category (full Sample vs scan sample).
+
+```{r, message = FALSE}
+# Function to perform proportion test and print results
+perform_proportion_test <- function(counts) {
+  prop_test <- prop.test(counts)
+  test_statistic <- prop_test$statistic
+  p_value <- prop_test$p.value
+  prop1 <- counts[1, 1] / sum(counts[1, ])
+  prop2 <- counts[2, 1] / sum(counts[2, ])
+  effect_size <- 2 * asin(sqrt(prop1)) - 2 * asin(sqrt(prop2))
+  
+  # Calculate the confidence interval for the difference in proportions
+  ci_diff <- prop_test$conf.int
+  ci_effect_size_lower <- 2 * asin(sqrt((ci_diff[1] + 1) / 2)) - 2 * asin(sqrt((1 - ci_diff[1]) / 2))
+  ci_effect_size_upper <- 2 * asin(sqrt((ci_diff[2] + 1) / 2)) - 2 * asin(sqrt((1 - ci_diff[2]) / 2))
+  
+  cat("Proportion in dfB_noT3:", prop1, "\n")
+  cat("Proportion in dfS_noT3:", prop2, "\n")
+  cat("Test Statistic:", test_statistic, "\n")
+  cat("P-value:", p_value, "\n")
+  cat("Effect Size (Cohen's h):", effect_size, "\n")
+  cat("95% CI for Effect Size (Cohen's h):", ci_effect_size_lower, ci_effect_size_upper, "\n")
+}
+
+# Gender: Female vs Male
+cat("\nTesting Gender: Female vs Male\n")
+counts_gender <- matrix(c(sum(dfB_noT3$gender == "female"), sum(dfB_noT3$gender == "male"),
+                          sum(dfS_noT3$gender == "female"), sum(dfS_noT3$gender == "male")), nrow = 2)
+perform_proportion_test(counts_gender)
+
+# Ethnicity: White vs all other ethnicities
+cat("\nTesting Ethnicity: White vs all other ethnicities\n")
+counts_ethnicity <- matrix(c(sum(dfB_noT3$ethnicity == "White"), sum(dfB_noT3$ethnicity != "White"),
+                             sum(dfS_noT3$ethnicity == "White"), sum(dfS_noT3$ethnicity != "White")), nrow = 2)
+perform_proportion_test(counts_ethnicity)
+
+# Ethnicity: Black vs all other ethnicities
+cat("\nTesting Ethnicity: Black vs all other ethnicities\n")
+counts_black <- matrix(c(sum(dfB_noT3$ethnicity == "Black"), sum(dfB_noT3$ethnicity != "Black"),
+                         sum(dfS_noT3$ethnicity == "Black"), sum(dfS_noT3$ethnicity != "Black")), nrow = 2)
+perform_proportion_test(counts_black)
+
+# Ethnicity: Asian vs all other ethnicities
+cat("\nTesting Ethnicity: Asian vs all other ethnicities\n")
+counts_asian <- matrix(c(sum(dfB_noT3$ethnicity == "Asian"), sum(dfB_noT3$ethnicity != "Asian"),
+                         sum(dfS_noT3$ethnicity == "Asian"), sum(dfS_noT3$ethnicity != "Asian")), nrow = 2)
+perform_proportion_test(counts_asian)
+
+# Ethnicity: Hispanic vs all other ethnicities
+cat("\nTesting Ethnicity: Hispanic vs all other ethnicities\n")
+counts_hispanic <- matrix(c(sum(dfB_noT3$ethnicity == "Hispanic"), sum(dfB_noT3$ethnicity != "Hispanic"),
+                            sum(dfS_noT3$ethnicity == "Hispanic"), sum(dfS_noT3$ethnicity != "Hispanic")), nrow = 2)
+perform_proportion_test(counts_hispanic)
+
+# Ethnicity: Other vs all other ethnicities
+cat("\nTesting Ethnicity: Other vs all other ethnicities\n")
+counts_other <- matrix(c(sum(dfB_noT3$ethnicity == "Other"), sum(dfB_noT3$ethnicity != "Other"),
+                         sum(dfS_noT3$ethnicity == "Other"), sum(dfS_noT3$ethnicity != "Other")), nrow = 2)
+perform_proportion_test(counts_other)
+
+# Income: Upper vs Lower
+cat("\nTesting Income: Upper vs Lower\n")
+counts_income <- matrix(c(sum(dfB_noT3$income == "Upper"), sum(dfB_noT3$income == "Lower"),
+                          sum(dfS_noT3$income == "Upper"), sum(dfS_noT3$income == "Lower")), nrow = 2)
+perform_proportion_test(counts_income)
+
+# Education: YesCollegeDegree vs NoCollegeDegree
+cat("\nTesting Education: YesCollegeDegree vs NoCollegeDegree\n")
+counts_education <- matrix(c(sum(dfB_noT3$education == "YesCollegeDegree"), sum(dfB_noT3$education == "NoCollegeDegree"),
+                             sum(dfS_noT3$education == "YesCollegeDegree"), sum(dfS_noT3$education == "NoCollegeDegree")), nrow = 2)
+perform_proportion_test(counts_education)
+
+# Handedness: Right vs Left
+cat("\nTesting Handedness: Right vs Left\n")
+counts_handedness <- matrix(c(sum(dfB_noT3$handedness == "Right"), sum(dfB_noT3$handedness == "Left"),
+                              sum(dfS_noT3$handedness == "Right"), sum(dfS_noT3$handedness == "Left")), nrow = 2)
+perform_proportion_test(counts_handedness)
+
+```
+
+
+Primary Analysis
+
+## 3. Pre-Intervention analysis 
+
+### 3.1. Differences at baseline full sample 
+
+```{r, message = FALSE}
+# Function to perform t-test, calculate effect size, and print results
+perform_t_test <- function(variable_name, data) {
+  lkm_data <- data[data$GroupID == "LKM", variable_name]
+  pmr_data <- data[data$GroupID == "PMR", variable_name]
+  
+  t_test <- t.test(lkm_data, pmr_data)
+  test_statistic <- t_test$statistic
+  p_value <- t_test$p.value
+  mean_lkm <- mean(lkm_data, na.rm = TRUE)
+  sd_lkm <- sd(lkm_data, na.rm = TRUE)
+  mean_pmr <- mean(pmr_data, na.rm = TRUE)
+  sd_pmr <- sd(pmr_data, na.rm = TRUE)
+  overall_mean <- mean(c(lkm_data, pmr_data), na.rm = TRUE) # Calculate overall mean
+  ci <- t_test$conf.int
+  
+  # Calculate Cohen's d for effect size
+  n_lkm <- length(lkm_data)
+  n_pmr <- length(pmr_data)
+  pooled_sd <- sqrt(((n_lkm - 1) * var(lkm_data, na.rm = TRUE) + (n_pmr - 1) * var(pmr_data, na.rm = TRUE)) / (n_lkm + n_pmr - 2))
+  cohen_d <- (mean_lkm - mean_pmr) / pooled_sd
+  
+  cat("\nTesting Variable:", variable_name, "\n")
+  cat("Mean in LKM:", mean_lkm, "\n")
+  cat("SD in LKM:", sd_lkm, "\n")
+  cat("Mean in PMR:", mean_pmr, "\n")
+  cat("SD in PMR:", sd_pmr, "\n")
+  cat("Overall Mean:", overall_mean, "\n") # Print overall mean
+  cat("Test Statistic:", test_statistic, "\n")
+  cat("P-value:", p_value, "\n")
+  cat("95% CI for the difference in means:", ci, "\n")
+  cat("Effect Size (Cohen's d):", cohen_d, "\n")
+}
+
+# Variables to test
+variables <- c("socialConnectedness_mean_T1","loneliness_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_PT_mean_T1", "traitEmpathyIRI_fant_mean_T1", "traitEmpathyIRI_PD_mean_T1", "inclusionOtherSelf_mean_T1", "wellbeing_mean_T1")
+
+# Perform t-tests for each variable
+for (variable in variables) {
+  perform_t_test(variable, dfB_noT3)
+}
+
+```
+
+### 3.2. Correlations at baseline full sample 
+
+```{r, message = FALSE}
+
+# Define variables of interest
+selected_vars <- c("socialConnectedness_mean_T1", "loneliness_mean_T1", "inclusionOtherSelf_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_PT_mean_T1", "wellbeing_mean_T1", "age", "Female", "Male")
+
+# Subset your data frame
+subset_data <- dfB_noT3[selected_vars]
+
+# Custom function to calculate p-values for a correlation matrix (Spearman)
+cor.mtest <- function(mat, conf.level = 0.95) {
+  mat <- as.matrix(mat)
+  n <- ncol(mat)
+  p.mat <- matrix(NA, n, n)
+  diag(p.mat) <- 0
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      tmp <- cor.test(mat[, i], mat[, j], method = "spearman", exact = FALSE) # Use Spearman
+      p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+    }
+  }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+# Calculate Spearman correlation matrix
+cor_matrix <- cor(subset_data, method = "spearman", use = "pairwise.complete.obs")
+
+# Calculate p-values using Spearman correlations
+p_matrix <- cor.mtest(subset_data)
+
+# Create a function to format the correlations with asterisks and p-values
+format_correlation <- function(cor, p) {
+  stars <- ifelse(p < 0.001, "***", ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "")))
+  paste0(sprintf("%.2f", cor), stars, " (", format(p, digits = 2), ")")
+}
+
+# Apply the function to format the entire correlation matrix
+formatted_cor_matrix <- matrix(NA, nrow = nrow(cor_matrix), ncol = ncol(cor_matrix))
+for (i in 1:nrow(cor_matrix)) {
+  for (j in 1:ncol(cor_matrix)) {
+    if (i != j) {
+      formatted_cor_matrix[i, j] <- format_correlation(cor_matrix[i, j], p_matrix[i, j])
+    } else {
+      formatted_cor_matrix[i, j] <- "-"
+    }
+  }
+}
+
+# Extract the lower triangle of the correlation matrix
+lower_triangle <- formatted_cor_matrix
+lower_triangle[upper.tri(lower_triangle, diag = TRUE)] <- ""
+
+# Convert lower_triangle to a data frame and add variable names
+lower_triangle_df <- as.data.frame(lower_triangle)
+colnames(lower_triangle_df) <- selected_vars
+rownames(lower_triangle_df) <- selected_vars
+
+# Calculate means and standard deviations
+means <- round(sapply(subset_data, mean, na.rm = TRUE), 2)
+sds <- round(sapply(subset_data, sd, na.rm = TRUE), 2)
+
+# Create a data frame for descriptive statistics
+desc_stats <- data.frame(Variable = selected_vars, Mean = means, SD = sds)
+
+# Combine the descriptive statistics and the lower triangle correlation matrix
+desc_stats_with_corr <- cbind(desc_stats, lower_triangle_df)
+rownames(desc_stats_with_corr) <- NULL
+
+# Print the final table
+print(desc_stats_with_corr)
+
+# Optional: Save the final table as a CSV
+write.csv(desc_stats_with_corr, "spearman_correlation_table_Full Sample_all_with_pvalues_T1.csv", row.names = FALSE)
+
+# Output the table in a formatted view
+kable(desc_stats_with_corr, format = "pandoc", caption = "Descriptive Statistics, Spearman Correlations, and P-values")
+
+```
+
+## 4. Trait Measures: Changes Over Time
+
+### 4.1. Prep time variable so we can look at changes from T1-T2 and T2-T3
+
+```{r, message = FALSE}
+
+# Mean-center GroupID to -0.5 and 0.5
+dfB_all_long$GroupID <- factor(dfB_all_long$GroupID, 
+                                      levels = c("PMR", "LKM"),  # Original levels
+                                      labels = c(-0.5, 0.5))     # New levels
+
+# Check the structure
+str(dfB_all_long$GroupID)
+
+
+# Define the time variable as a factor
+dfB_all_long$time <- factor(dfB_all_long$time, levels = c(1, 2, 3))
+
+# Correct the contrast matrix: 3 rows for 3 levels, 2 columns for 2 contrasts
+contrasts(dfB_all_long$time) <- t(rbind(
+  c(-1, 1, 0),  # Contrast T1 vs T2
+  c(0, -1, 1)   # Contrast T2 vs T3
+))
+
+# Check the contrasts to ensure they're applied correctly
+contrasts(dfB_all_long$time)
+
+
+# Summary of Advantages of coding GroupID as 0.5 vs -0.5:
+# Intercept: Represents the overall mean instead of one group.
+# GroupID Coefficient: Symmetric, intuitive, and unaffected by the reference group choice.
+# Stability: Reduces multicollinearity, especially with interactions.
+# Consistency: Aligns binary predictors with mean-centered continuous variables.
+# For our specific case, coding LKM as 0.5 and PMR as -0.5 is particularly beneficial because:
+# 
+# LKM is experimental group.
+# We have interaction terms (e.g., time * GroupID).
+# The interpretation becomes cleaner and more symmetrical.
+
+```
+
+### 4.2.1. Loneliness over time
+
+```{r, message = FALSE}
+
+# Run the model with the custom contrasts
+fitH1c_1_contrast <- lme(loneliness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+
+tab_model(lme(loneliness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~ 1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# save model 
+tab_model(fitH1c_1_contrast, file = "fit1H1c_T3.html", 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+```
+
+
+### 4.2.2. Plot loneliness
+
+```{r, message = FALSE}
+library(ggplot2)
+library(cowplot)
+
+# Update GroupID labels
+loneliness_data <- dfB_all_long %>%
+  mutate(GroupID_label = ifelse(GroupID == 0.5, "LKM", "PMR")) %>%
+  select(SubID, time, GroupID_label, loneliness_mean)
+
+# Main scatter and line plot for loneliness
+loneliness_plot <- ggplot(loneliness_data, aes(x = time, y = loneliness_mean, group = GroupID_label, color = GroupID_label)) +
+  stat_summary(fun = mean, geom = "line", aes(linetype = GroupID_label), size = 1.2) + 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15, size = 0.8, color = "black") + 
+  geom_jitter(width = 0.1, alpha = 0.4, aes(color = GroupID_label), size = 1.5, show.legend = FALSE) + 
+  theme_apa() + 
+  labs(
+    x = "Time",
+    y = "Loneliness Mean Score",
+    linetype = "Group",
+    color = "Group"
+  ) +
+  scale_x_discrete(labels = c("T1", "T2", "T3")) + 
+  scale_color_manual(values = c("hotpink", "blue")) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.margin = margin(5, 5, 5, 5)
+  )
+
+# Rotated density plot
+density_plot <- ggplot(loneliness_data, aes(y = loneliness_mean, fill = GroupID_label)) +
+  geom_density(alpha = 0.6) +
+  scale_fill_manual(values = c("hotpink", "blue")) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(0, -20, 0, 0)  # Add negative margin on the left
+  )
+
+# Combine the main plot and density plot
+combined_plot <- plot_grid(
+  loneliness_plot, density_plot,
+  ncol = 2,
+  rel_widths = c(0.8, 0.2),  # Keep proportions unchanged
+  align = "vh",              # Align both vertically and horizontally
+  axis = "tb"                # Ensure x-axis and y-axis alignment
+)
+
+# Display the combined plot
+print(combined_plot)
+
+
+
+
+```
+
+### 4.3.1. IRI and subscales over time
+
+```{r, message = FALSE}
+
+# Run the model with the custom contrasts
+fitH1e_1_contrast <- lme(traitEmpathyIRI_EC_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+
+tab_model(lme(traitEmpathyIRI_EC_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# save model 
+tab_model(fitH1e_1_contrast, file = "fit1H1e_T3.html", 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# Run the model with the custom contrasts
+fitH1g_1_contrast <- lme(traitEmpathyIRI_PT_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+
+tab_model(lme(traitEmpathyIRI_PT_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# save model 
+tab_model(fitH1g_1_contrast, file = "fit1H1g_T3.html", 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+```
+
+### 4.4.1. IOS mean and stranger over time 
+
+```{r, message = FALSE}
+
+# Run the model with the custom contrasts
+
+tab_model(lme(inclusionOtherSelf_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+tab_model(lme(inclusionOtherSelf_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# Run the model with the custom contrasts
+fitH1h_1_contrast <- lme(IOS_strangerNum ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+
+tab_model(lme(IOS_strangerNum ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
+          show.df = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+fit_ios_stranger <- lme(IOS_strangerNum ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+# save model 
+tab_model(fit_ios_stranger, file = "fit_ios_stranger.html", 
+          show.df = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+```
+
+### 4.4. Plot IOS mean and stranger
+
+```{r, message = FALSE}
+# Load required packages
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(papaja)
+
+# Reshape the data to long format for all 4 subscales
+df_long_ios <- dfB_all_long %>%
+  select(SubID, time, GroupID, inclusionOtherSelf_mean, IOS_strangerNum) %>%
+  pivot_longer(cols = c(inclusionOtherSelf_mean, IOS_strangerNum),
+               names_to = "measure",
+               values_to = "value")
+
+# Define labels for the measures
+df_long_ios$measure <- factor(df_long_ios$measure, 
+                          levels = c(
+                                     "inclusionOtherSelf_mean", "IOS_strangerNum"),
+                          labels = c("IOS Mean", "IOS Stranger"))
+
+# Update GroupID labels
+df_long_ios <- df_long_ios %>%
+  mutate(GroupID = recode(GroupID, `-0.5` = "PMR", `0.5` = "LKM"))
+
+# Create the main plot with time converted to a factor
+p <- ggplot(df_long_ios, aes(x = factor(time), y = value, group = interaction(measure, GroupID))) +
+  stat_summary(fun = mean, geom = "line", aes(color = measure, linetype = GroupID), size = 1.2) +  # Different line types for GroupIDs, colors for measure
+  stat_summary(fun = mean, geom = "point", size = 3, aes(shape = GroupID), position = position_dodge(width = 0.2)) +  # Add points for each GroupID
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15, size = 0.8, 
+               position = position_dodge(width = 0.2)) +  # Add error bars with dodge
+  geom_jitter(width = 0.1, alpha = 0.3, aes(color = measure, shape = GroupID), size = 1.5, show.legend = FALSE) +  # Add scatter points for each GroupID
+  theme_apa() +  # Use a clean, minimal theme
+  labs(x = "Time",
+       y = "Mean Score",
+       color = "Subscale",
+       linetype = "Meditation Type",
+       shape = "Meditation Type") + 
+  scale_x_discrete(labels = c("T1", "T2", "T3")) +  # Label time points
+  scale_color_manual(values = c("salmon", "violet")) +  # Use custom colors for subscales
+    scale_linetype_manual(values = c("PMR" = "twodash", "LKM" = "solid")) +  # Specify linetypes for GroupID
+
+  guides(color = guide_legend(override.aes = list(linetype = 1, size = 1.2)),  # Override aesthetics for measure to show only lines
+         linetype = guide_legend(order = 1),  # Ensure linetype is in the right order
+         shape = guide_legend(order = 1)) +  # Ensure shape is in the right order
+  theme(legend.position = "right",
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.key.width = unit(0.9, "cm"))
+
+# Display the plot
+print(p)
+
+
+```
+
+## 5. Differences in subjetive ratings
+
+### 5.1. 2sample T-tests
+
+```{r, message = FALSE}
+
+#detach("package:plyr", unload = TRUE)
+
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(tidyr)  # needed for pivot_longer
+
+# Define your results data frame (t-test results remain unchanged)
+results <- data.frame(Variable = character(), 
+                      Mean_LKM = numeric(), 
+                      Mean_PMR = numeric(), 
+                      SD_LKM = numeric(), 
+                      SD_PMR = numeric(), 
+                      t_value = numeric(), 
+                      df = numeric(), 
+                      p_value = numeric(), 
+                      CI_lower = numeric(),
+                      CI_upper = numeric(),
+                      Significance = character(),
+                      Effect_Size = numeric(),
+                      stringsAsFactors = FALSE)
+
+# Variables and their corresponding labels (using your original list)
+variables <- c("PSI", "painRatingSelf", "self_fearOfPain", "self_unpleasantPain", 
+               "painRatingOther", "other_fearOfPain", "other_unpleasantPain")
+
+labels <- c("PSI", 
+            "Pain Rating (Self)", 
+            "Fear Rating (Self)", 
+            "Unpleasantness Rating (Self)", 
+            "Pain Rating (Other)", 
+            "Fear Rating (Other)", 
+            "Unpleasantness Rating (Other)")
+
+# Loop through each variable to perform t-tests on raw data
+for (var in variables) {
+  # Perform independent 2-sample t-test
+  t_test <- t.test(dfS_noT3[[var]] ~ dfS_noT3$GroupID, var.equal = TRUE)
+  
+  # Calculate means and SDs for each group
+  means <- dfS_noT3 %>% 
+    group_by(GroupID) %>% 
+    summarise(
+      Mean = mean(get(var), na.rm = TRUE),
+      SD = sd(get(var), na.rm = TRUE)
+    )
+  
+  # Calculate effect size (Cohen's d)
+  n_lkm <- sum(dfS_noT3$GroupID == "LKM")
+  n_pmr <- sum(dfS_noT3$GroupID == "PMR")
+  pooled_sd <- sqrt(((n_lkm - 1) * means$SD[means$GroupID == "LKM"]^2 + 
+                     (n_pmr - 1) * means$SD[means$GroupID == "PMR"]^2) / 
+                    (n_lkm + n_pmr - 2))
+  cohen_d <- abs(means$Mean[means$GroupID == "LKM"] - means$Mean[means$GroupID == "PMR"]) / pooled_sd
+  
+  # Append results to the data frame with CI bounds
+  results <- rbind(results, data.frame(
+    Variable = var,
+    Mean_LKM = means$Mean[means$GroupID == "LKM"],
+    Mean_PMR = means$Mean[means$GroupID == "PMR"],
+    SD_LKM = means$SD[means$GroupID == "LKM"],
+    SD_PMR = means$SD[means$GroupID == "PMR"],
+    t_value = t_test$statistic,
+    df = t_test$parameter,
+    p_value = t_test$p.value,
+    CI_lower = t_test$conf.int[1],
+    CI_upper = t_test$conf.int[2],
+    Significance = ifelse(t_test$p.value < 0.05, "Significant", "Not Significant"),
+    Effect_Size = cohen_d
+  ))
+}
+
+# Save the results table as a CSV file (APA appropriate)
+results_apa <- results %>% mutate_if(is.numeric, ~ round(., 2))
+write.csv(results_apa, "APA_t_test_results.csv", row.names = FALSE)
+print(results_apa)
+
+# For plotting, standardize (z-score) all the variables
+# Create new standardized columns named "std_<variable>"
+dfS_noT3_std <- dfS_noT3 %>%
+  mutate(across(all_of(variables), ~ as.numeric(scale(.)), .names = "std_{col}"))
+
+# Create a vector of standardized variable names
+std_variables <- paste0("std_", variables)
+
+# Create a long-format data frame for plotting using the standardized variables
+df_long_std <- dfS_noT3_std %>%
+  select(GroupID, all_of(std_variables)) %>%
+  pivot_longer(cols = -GroupID, names_to = "Variable", values_to = "Value") %>%
+  mutate(Variable = factor(Variable, levels = std_variables, labels = labels))
+
+# Define custom colors: adjust as needed (example: purple and blue)
+custom_colors <- c("LKM" = "#377EB8",  # Purple
+                   "PMR" = "#4DA")  # Orange
+# Create one combined violin plot using the standardized values
+plot_all <- ggplot(df_long_std, aes(x = Variable, y = Value, fill = GroupID)) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 0.6) +
+  geom_jitter(aes(fill = GroupID), 
+              shape = 21,                # circle with fill and outline
+              color = "black",            # grey outline
+              position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8),
+              size = 1.5, alpha = 0.4) +
+  stat_summary(fun = mean, geom = "point", position = position_dodge(width = 0.8), 
+               shape = 21, size = 3, fill = "white") +
+  stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(width = 0.8), 
+               width = 0.2) +
+  labs(title = "Comparison of Standardized Variables",
+       x = "Variable", y = "Standardized Value (z-score)") +
+  scale_fill_manual(values = custom_colors) +
+  scale_color_manual(values = custom_colors) +
+  theme_apa() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the combined plot
+print(plot_all)
+
+
+
+```
+### 5.2. Study partner 
+
+```{r, message = FALSE}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(tidyr)   # for pivot_longer
+
+# Define your results data frame
+results <- data.frame(Variable = character(), 
+                      Mean_LKM = numeric(), 
+                      Mean_PMR = numeric(), 
+                      SD_LKM = numeric(), 
+                      SD_PMR = numeric(), 
+                      t_value = numeric(), 
+                      df = numeric(), 
+                      p_value = numeric(), 
+                      CI_lower = numeric(),
+                      CI_upper = numeric(),
+                      Significance = character(),
+                      Effect_Size = numeric(),
+                      stringsAsFactors = FALSE)
+
+# Define variables and their labels in the desired order:
+# 1. IOS (Mean) from inclusionOtherSelf_mean_T2
+# 2. IOS (Stranger) from IOS_strangerNum_T2
+# 3. IOS (Study Partner) from IOS_studyPartner
+# 4. Liking (Study Partner) from studyPartnerLiking
+# 5. Real (Study Partner) from studyPartnerReal
+variables <- c("inclusionOtherSelf_mean_T2", "IOS_strangerNum_T2", 
+               "IOS_studyPartner", "studyPartnerLiking", "studyPartnerReal")
+labels <- c("IOS (Mean)", "IOS (Stranger)", "IOS (Study Partner)", 
+            "Liking (Study Partner)", "Real (Study Partner)")
+
+# Loop through each variable to perform t-tests on raw data
+for (var in variables) {
+  # Perform independent 2-sample t-test
+  t_test <- t.test(dfS_noT3[[var]] ~ dfS_noT3$GroupID, var.equal = TRUE)
+  
+  # Calculate means and SDs for each group
+  means <- dfS_noT3 %>% 
+    group_by(GroupID) %>% 
+    summarise(
+      Mean = mean(.data[[var]], na.rm = TRUE),
+      SD = sd(.data[[var]], na.rm = TRUE)
+    )
+  
+  # Calculate effect size (Cohen's d)
+  n_lkm <- sum(dfS_noT3$GroupID == "LKM")
+  n_pmr <- sum(dfS_noT3$GroupID == "PMR")
+  pooled_sd <- sqrt(((n_lkm - 1) * means$SD[means$GroupID == "LKM"]^2 + 
+                     (n_pmr - 1) * means$SD[means$GroupID == "PMR"]^2) / 
+                    (n_lkm + n_pmr - 2))
+  cohen_d <- abs(means$Mean[means$GroupID == "LKM"] - means$Mean[means$GroupID == "PMR"]) / pooled_sd
+  
+  # Append results to the data frame with CI bounds
+  results <- rbind(results, data.frame(
+    Variable = var,
+    Mean_LKM = means$Mean[means$GroupID == "LKM"],
+    Mean_PMR = means$Mean[means$GroupID == "PMR"],
+    SD_LKM = means$SD[means$GroupID == "LKM"],
+    SD_PMR = means$SD[means$GroupID == "PMR"],
+    t_value = t_test$statistic,
+    df = t_test$parameter,
+    p_value = t_test$p.value,
+    CI_lower = t_test$conf.int[1],
+    CI_upper = t_test$conf.int[2],
+    Significance = ifelse(t_test$p.value < 0.05, "Significant", "Not Significant"),
+    Effect_Size = cohen_d
+  ))
+}
+
+# Round numeric columns for APA-style presentation and save results as CSV
+results_apa <- results %>% mutate_if(is.numeric, ~ round(., 2))
+write.csv(results_apa, "APA_t_test_results.csv", row.names = FALSE)
+print(results_apa)
+
+# For plotting, standardize (z-score) all the variables for better comparability.
+# Create new standardized columns (named std_<variable>)
+dfS_noT3_std <- dfS_noT3 %>%
+  mutate(across(all_of(variables), ~ as.numeric(scale(.)), .names = "std_{col}"))
+
+# Create a vector of standardized variable names in the same order
+std_variables <- paste0("std_", variables)
+
+# Create a long-format data frame for plotting using the standardized variables
+df_long_std <- dfS_noT3_std %>%
+  select(GroupID, all_of(std_variables)) %>%
+  pivot_longer(cols = -GroupID, names_to = "Variable", values_to = "Value") %>%
+  mutate(Variable = factor(Variable, levels = std_variables, labels = labels))
+
+# Define custom colors: Purple for "LKM" and Orange for "PMR"
+custom_colors <- c("LKM" = "#800080",  # Purple
+                   "PMR" = "pink")  # Orange
+
+# Create the violin plot with jitter (jitter points using shape 21 with grey outlines)
+plot_std <- ggplot(df_long_std, aes(x = Variable, y = Value, fill = GroupID)) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 0.6) +
+  geom_jitter(aes(fill = GroupID), 
+              shape = 21,                 # circle with both fill and outline
+              color = "black",             # grey outline
+              position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8),
+              size = 1.5, alpha = 0.4) +   # transparent jitter points
+  stat_summary(fun = mean, geom = "point", position = position_dodge(width = 0.8),
+               shape = 21, size = 3, fill = "white") +
+  stat_summary(fun.data = mean_se, geom = "errorbar", position = position_dodge(width = 0.8),
+               width = 0.2) +
+  labs(title = "Comparison of Standardized Study Partner Variables",
+       x = "Variable", y = "Standardized Value (z-score)") +
+  scale_fill_manual(values = custom_colors) +
+  scale_color_manual(values = custom_colors) +
+  theme_apa() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plot
+print(plot_std)
+
+```
+
+## 6. State Empathy 
+
+### 6.1. Trait Empathy 
+
+```{r, message = FALSE}
+
+# fear 
+tab_model(lm(traitEmpathyIRI_EC_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# pain rating 
+tab_model(lm(traitEmpathyIRI_EC_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# unpleasantness 
+tab_model(lm(traitEmpathyIRI_EC_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(traitEmpathyIRI_PD_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(traitEmpathyIRI_fant_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+```
+
+### 6.2. Loneliness 
+
+```{r, message = FALSE}
+
+# fear
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# pain rating 
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# unpleasantness 
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+```
+
+### 6.3. IOS
+
+```{r, message = FALSE}
+
+# fear
+tab_model(lm(inclusionOtherSelf_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(IOS_strangerNum_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(IOS_studyPartner ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+# pain rating 
+tab_model(lm(inclusionOtherSelf_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(IOS_strangerNum_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(IOS_studyPartner ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# unpleasantness of pain 
+tab_model(lm(inclusionOtherSelf_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(IOS_strangerNum_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+tab_model(lm(IOS_studyPartner ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+```
+
+### 6.4. Wellbeing 
+
+```{r, message = FALSE}
+# fear
+tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# pain rating 
+tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+# unpleasantness of pain 
+tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+
+```
+
+
+## 7. 3dMVM
+
+### 7.1. Prep data for AFNI analysis
+
+```{r, message = FALSE}
+# List of variables to mean center for 3dMVM analysis in AFNI where these are our predictors of pattern similarity 
+variables_to_center <- c("loneliness_mean_T2", "traitEmpathyIRI_EC_mean_T2", "traitEmpathyIRI_PT_mean_T2", "stateEmp_fear", "stateEmp_painUnpleasant", "stateEmp_painRating" 
+)
+
+# Loop over each variable to mean-center
+for (var in variables_to_center) {
+  # Check if the column exists in dfS_noT3
+  if (var %in% colnames(dfS_noT3)) {
+    # Create the mean-centered column
+    dfS_noT3[[paste0("mc_", var)]] <- dfS_noT3[[var]] - mean(dfS_noT3[[var]], na.rm = TRUE)
+  } else {
+    warning(paste("Column", var, "is missing in dfS_noT3 and will be skipped."))
+  }
+}
+
+# Verify the result
+head(dfS_noT3)
+
+# Example of selecting and printing specific columns
+mc_df = dfS_noT3 %>%
+  select(SubID, GroupID, mc_loneliness_mean_T2, mc_traitEmpathyIRI_EC_mean_T2,mc_traitEmpathyIRI_PT_mean_T2, mc_stateEmp_fear, mc_stateEmp_painUnpleasant, mc_stateEmp_painRating) %>%
+  print()
+
+
+```
+
+
+### 7.2. AI and dACC
+
+```{r, message = FALSE}
+library(ggplot2)
+library(ggthemes)  # For APA theme
+library(ggExtra)
+library(papaja)
+
+# List of DVs and their corresponding IVs
+dv_iv_mapping <- list(
+"EC_patternsim_pain_dACC_MainEffect" = "mc_traitEmpathyIRI_EC_mean_T2",
+"mc_stateEmp_fear_patternsim_anticipation_rightAI_Interaction" = "mc_stateEmp_fear",
+"mc_stateEmp_painRating_patternsim_pain_leftAI_MainEffect" = "mc_stateEmp_painRating",
+"mc_stateEmp_painUnpleasant_patternsim_anticipation_dACC_Interaction" = "mc_stateEmp_painUnpleasant"
+)
+
+# Function to generate custom labels for IVs, DVs, and title components
+get_labels <- function(iv, dv) {
+  iv_labels <- list(
+    "mc_traitEmpathyIRI_EC_mean_T2" = "Empathic Concern",
+    "mc_loneliness_mean_T2" = "Loneliness",
+    "mc_stateEmp_fear" = "State Empathy (Fear)",
+    "mc_stateEmp_painUnpleasant" = "State Empathy (Unpleasantness)",
+    "mc_traitEmpathyIRI_PT_mean_T2" = "Perspective Taking",
+    "mc_stateEmp_painRating" = "State Empathy (Pain Rating)"
+  )
+  
+  dv_labels <- c(
+    "decoding_anticipation" = "AUC (Fearful Anticipation)",
+    "decoding_pain" = "AUC (Pain)",
+    "patternsim_pain" = "Pattern Similarity (Pain)",
+    "patternsim_anticipation" = "Pattern Similarity (Fearful Anticipation)",
+    "self_pain" = "Brain Activity (Experience Pain)",
+    "self_anticipation" = "Brain Activity (Experience Fearful Anticipation)",
+    "other_pain" = "Brain Activity (Observe Pain)",
+    "other_anticipation" = "Brain Activity (Observe Fearful Anticipation)"
+  )
+  
+  # Extract the DV type (e.g., "decoding_anticipation") and region (e.g., "dACC")
+  dv_type <- sub(".*_(decoding_anticipation|decoding_pain|patternsim_pain|patternsim_anticipation|self_pain|self_anticipation|other_pain|other_anticipation).*", "\\1", dv)
+  region <- ifelse(grepl("dACC", dv), "dACC",
+                   ifelse(grepl("leftAI", dv), "Left AI", "Right AI"))
+  
+  # Extract effect type (Main Effect, Interaction, or LKM vs PMR)
+  effect_type <- ifelse(grepl("MainEffect", dv), "Main Effect",
+                        ifelse(grepl("Interaction", dv), "Interaction", "LKM vs PMR"))
+  
+  iv_label <- iv_labels[[iv]]
+  dv_label <- paste(dv_labels[[dv_type]], region)
+  
+  list(iv_label = iv_label, dv_label = dv_label, effect_type = effect_type)
+}
+
+# Loop through each DV-IV pair and create a plot
+for (dv in names(dv_iv_mapping)) {
+  iv <- dv_iv_mapping[[dv]]
+  
+  # Check if DV exists in dfS_noT3
+  if (dv %in% colnames(dfS_noT3) & iv %in% colnames(dfS_noT3)) {
+    labels <- get_labels(iv, dv)
+    
+    # Create scatter plot with interaction
+    plot_interaction <- ggplot(dfS_noT3, aes_string(x = iv, y = dv, color = "GroupID")) +
+      geom_point() +
+      geom_smooth(method = "lm", aes(fill = "GroupID"), se = TRUE) +
+      scale_color_manual(values = c("LKM" = "darkblue", "PMR" = "steelblue1")) +
+      scale_fill_manual(values = c("LKM" = "darkblue", "PMR" = "steelblue1"), guide = FALSE) +
+      labs(
+        x = labels$iv_label,
+        y = labels$dv_label,
+        color = "Group",
+        title = paste(labels$effect_type)
+      ) +
+      theme_apa()
+          # Add marginal density plots for each axis, with color by GroupID
+      plot_interaction <- ggMarginal(
+        plot_interaction,
+        type = "density",
+        groupFill = TRUE,  # Color densities by group
+        margins = "both",  # Add marginal plots on both axes
+        size = 5,  # Adjust marginal plot size
+        alpha = 0.4  # Transparency for density plots
+      )
+          
+    # Print the plot
+    print(plot_interaction)
+    
+    # Save the plot as a file
+    ggsave(
+      filename = paste0("/my/path/data/plot_", dv, "_vs_", iv, ".png"),
+      plot = plot_interaction,
+      width = 8, height = 6
+    )
+    
+    print(paste("Plot saved for DV:", dv, "and IV:", iv))
+  } else {
+    print(paste("Skipping DV:", dv, "or IV:", iv, "as it is not found in the dataframe."))
+  }
+}
+
+
+```
+

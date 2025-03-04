@@ -1,0 +1,1601 @@
+---
+title: "Data Cleaning: Loneliness modulates self-reported empathy but not empathic multi-voxel neural response patterns after meditation training"
+author: "Marla Dressel"
+date: "02/02/2023"
+output:
+html_document:
+df_print: paged
+---
+  
+```{r, message = FALSE}
+# import packages
+library(readr)
+library(tidyr) 
+library(plyr)
+library(dplyr)  
+library(data.table) 
+library(stringr)
+library(purrr)
+library(readxl)
+```
+
+# 1. Screener Survey (T1)
+
+### 1.1. import data (Week 1, pre intervention)
+
+```{r, message = FALSE}
+
+# Define the path to the directory
+path <- "/my/path/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
+
+# Construct the full file path and import qualtrics screener data (time point 1)
+df_T1 <- read.csv(file.path(path, "raw/rawdata_T1_preIntervention.csv"), header = TRUE)
+
+
+```
+
+### 1.2. gross clean and initial exclusions
+
+```{r, message = FALSE}
+
+# Choose valid subject IDs
+df_T1$id[df_T1$id == "002"] <- "ML002"  # id was put in incorrectly
+df_T1 <- df_T1[grepl("ML", df_T1$id),]  # exclude empty id rows
+df_T1 <- df_T1[grepl(1, df_T1$Finished),]  # exclude unfinished surveys
+colnames(df_T1) <- gsub("id", "SubID", colnames(df_T1)) #rename subject number column 
+
+# Move SubID to the first column
+df_T1 <- df_T1 %>%
+  dplyr::select(SubID, everything())
+
+# remove non numerical prefix
+df_T1$SubID <- gsub("ML", "", df_T1$SubID) 
+df_T1$SubID <- as.numeric(df_T1$SubID) # remove ML and make numeric
+df_T1 <- df_T1[order(df_T1$SubID),] # reorder according to SubID
+
+# one subject was given the SubID of a previous subject, so we manually change it to their correct ID
+df_T1$SubID[df_T1$EndDate == "2023-04-28 09:06:52"] <- 137
+df_T1 <- df_T1[order(df_T1$SubID),]
+
+# two people took the survey twice, so we discard their second attempt manually (SubID 140 and 184)
+df_T1 <- df_T1[!df_T1$ResponseId == "R_31yFirmClvxCiuN",]
+df_T1 <- df_T1[!df_T1$ResponseId == "R_3CO4gNO1MZ6ctJX",]
+```
+
+### 1.3. select variables of interest
+
+```{r, message = FALSE}
+
+# SCS-R
+socialConnectedness <- df_T1 %>% dplyr::select(SubID, contains("SCS"), -matches("_T_")) # making new data frame with all columns that contain the string SCS
+reverse_cols <- c("SCS_1", "SCS_2", "SCS_3", "SCS_4","SCS_5", "SCS_6", "SCS_8","SCS_10","SCS_15", "SCS_18") # which ones are reverse coded 
+socialConnectedness <- data.frame(apply(socialConnectedness, 2, as.numeric))
+socialConnectedness[, reverse_cols] <- 7 - socialConnectedness[, reverse_cols] # reverse code
+df_long_socialConnectedness <- melt(setDT(socialConnectedness), id.vars = "SubID") # long format
+df_long_socialConnectedness <- df_long_socialConnectedness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(socialConnectedness_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- df_long_socialConnectedness
+
+# UCLA
+loneliness <- df_T1 %>% dplyr::select(SubID, contains("UCLA"), -matches("_T_"))
+reverse_cols <- c("UCLA_1", "UCLA_5", "UCLA_9", "UCLA_10","UCLA_15", "UCLA_16", "UCLA_19","UCLA_20")
+loneliness <- data.frame(apply(loneliness, 2, as.numeric))
+loneliness[, reverse_cols] <- 5 - loneliness[, reverse_cols] # reverse code
+df_long_loneliness <- melt(setDT(loneliness), id.vars = "SubID") # long format
+df_long_loneliness <- df_long_loneliness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(loneliness_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_loneliness, by = "SubID")
+
+# IRI
+traitEmpathyIRI <- df_T1 %>% dplyr::select(SubID, contains("IRI"), -matches("_T_"))
+df_long_traitEmpathyIRI <- melt(setDT(traitEmpathyIRI), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI$value = as.numeric(df_long_traitEmpathyIRI$value) # numeric
+df_long_traitEmpathyIRI <- df_long_traitEmpathyIRI %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_traitEmpathyIRI, by = "SubID")
+
+#IRI subscales
+#Fantasy
+df_traitEmpathyIRI_fant <- traitEmpathyIRI %>% dplyr::select("SubID","IRI_1","IRI_5", "IRI_7", "IRI_12", "IRI_16", "IRI_23", "IRI_26")
+df_long_traitEmpathyIRI_fant <- melt(setDT(df_traitEmpathyIRI_fant), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_fant$value = as.numeric(df_long_traitEmpathyIRI_fant$value)
+df_long_traitEmpathyIRI_fant <- df_long_traitEmpathyIRI_fant %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_fant_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_traitEmpathyIRI_fant, by = "SubID")
+
+#Perspective-taking
+df_traitEmpathyIRI_PT <- traitEmpathyIRI %>% dplyr::select("SubID","IRI_3","IRI_8", "IRI_11", "IRI_15", "IRI_21", "IRI_25", "IRI_28")
+df_long_traitEmpathyIRI_PT <- melt(setDT(df_traitEmpathyIRI_PT), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PT$value = as.numeric(df_long_traitEmpathyIRI_PT$value)
+df_long_traitEmpathyIRI_PT <- df_long_traitEmpathyIRI_PT %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PT_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_traitEmpathyIRI_PT, by = "SubID")
+
+#Empathic Concern
+df_traitEmpathyIRI_EC <- traitEmpathyIRI %>% dplyr::select("SubID","IRI_2","IRI_4", "IRI_9", "IRI_14", "IRI_18", "IRI_20", "IRI_22")
+df_long_traitEmpathyIRI_EC <- melt(setDT(df_traitEmpathyIRI_EC), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_EC$value = as.numeric(df_long_traitEmpathyIRI_EC$value)
+df_long_traitEmpathyIRI_EC <- df_long_traitEmpathyIRI_EC %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_EC_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_traitEmpathyIRI_EC, by = "SubID")
+
+#Personal Distress
+df_traitEmpathyIRI_PD <- traitEmpathyIRI %>% dplyr::select("SubID","IRI_6","IRI_10", "IRI_13", "IRI_17", "IRI_19", "IRI_24", "IRI_27")
+df_long_traitEmpathyIRI_PD <- melt(setDT(df_traitEmpathyIRI_PD), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PD$value = as.numeric(df_long_traitEmpathyIRI_PD$value)
+df_long_traitEmpathyIRI_PD <- df_long_traitEmpathyIRI_PD %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PD_mean_T1 = mean)) # calculate mean per participant
+
+df_ml_T1 <- left_join(df_ml_T1, df_long_traitEmpathyIRI_PD, by = "SubID")
+
+# IOS
+inclusionOtherSelf <- df_T1 %>% dplyr::select(SubID, contains("IOS"))
+inclusionOtherSelf$IOS_1b <- as.numeric(inclusionOtherSelf$IOS_1b)
+inclusionOtherSelf$IOS_2b <- as.numeric(inclusionOtherSelf$IOS_2b)
+inclusionOtherSelf$IOS_3b <- as.numeric(inclusionOtherSelf$IOS_3b)
+inclusionOtherSelf$IOS_4b <- as.numeric(inclusionOtherSelf$IOS_4b)
+inclusionOtherSelf$IOS_5 <- as.numeric(inclusionOtherSelf$IOS_5)
+inclusionOtherSelf$inclusionOtherSelf_mean <- rowMeans(inclusionOtherSelf[,c("IOS_1b", "IOS_2b", "IOS_3b", "IOS_4b", "IOS_5")])
+inclusionOtherSelf$inclusionOtherSelf_mean_nostranger <- rowMeans(inclusionOtherSelf[,c("IOS_1b", "IOS_2b", "IOS_3b", "IOS_4b")]) # IOS but not for stranger 
+colnames(inclusionOtherSelf) <- c("SubID", "IOS_immediateFamily_T1", "IOS_immediateFamilyNum_T1", "IOS_extendedFamily_T1", "IOS_extendedFamilyNum_T1", "IOS_friend_T1", "IOS_friendNum_T1", "IOS_acquaintance_T1", "IOS_acquaintanceNum_T1", "IOS_strangerNum_T1", "inclusionOtherSelf_mean_T1", "inclusionOtherSelf_mean_nostranger_T1")
+
+df_ml_T1 <- left_join(df_ml_T1, inclusionOtherSelf, by = "SubID")
+
+# Cantrill wellbeing Ladder
+wellbeing <- df_T1 %>% dplyr::select(SubID, contains("LADDER"))
+wellbeing$LADDER_PRESENT <- as.numeric(as.character(wellbeing$LADDER_PRESENT))
+wellbeing$LADDER_FUTURE  <- as.numeric(as.character(wellbeing$LADDER_FUTURE))
+wellbeing$wellbeing_mean_T1 <- rowMeans(wellbeing[, c("LADDER_PRESENT", "LADDER_FUTURE")], na.rm = TRUE)
+colnames(wellbeing) <- c("SubID", "wellbeingPresent_T1", "wellbeingFuture_T1", "wellbeing_mean_T1")
+
+df_ml_T1 <- left_join(df_ml_T1, wellbeing, by = "SubID")
+
+```
+
+### 1.4. prior meditation experience
+
+```{r, message = FALSE}
+## prior meditation experience
+priorMedExp <- df_T1 %>% dplyr::select(SubID, matches("MEDITATION")) 
+colnames(priorMedExp) <- c("SubID","priorMedExpClosed", "priorMedExpOpen", "priorMedExpHours")
+
+df_ml_T1 <- left_join(df_ml_T1, priorMedExp, by = "SubID")
+
+```
+
+### 1.5. demographics 
+
+```{r, message = FALSE}
+
+# age
+df_T1$AGE[df_T1$SubID == 122] <- 64 # one participant (122) put birth year and month (march 1959) but not age 
+
+age <- df_T1 %>% dplyr::select(SubID, contains("AGE"), -matches("LANGUAGE"), -matches("PAGE"))
+age <- age %>%
+  mutate(agefull = case_when(
+    AGE <= 39 ~ "young adult",
+    AGE >= 40 & AGE <= 59 ~ "middle adult",
+    AGE >= 60 ~ "old adult"
+  ))
+colnames(age) <- c("SubID", "age", "agefull")
+
+df_ml_T1 <- left_join(df_ml_T1, age, by = "SubID")
+
+# single column demographics
+demo <- df_T1 %>% dplyr::select(SubID, contains("BIRTH"), contains("PRONOUNS"), contains("USLIVED"), 
+                                     contains("LANGUAGE"),  contains("YRSENGLISH"), 
+                                     contains("ENGPROF"), contains("JOBTITLE"), contains("PUBLIC ASSISTANCE"), 
+                                     contains("HOUSENUM"), contains("householdCOMP"), contains("POL"), 
+                                     contains("EVANG"), contains("SPIRT"))
+
+colnames(demo) <- c("SubID", "birth", "pronouns", 
+                   "yearslivedUS", "UserLang", "firstLangEng", 
+                   "yearsspeakingEng", "EnglishProficiency", 
+                   "jobtitle", "householdNum", "householdComp1", 
+                   "householdComp2", "householdComp3", "householdComp4", 
+                   "politicalIssues", "socialIssues", "economicIssues", 
+                   "evangelic", "spirituality")
+
+df_ml_T1 <- left_join(df_ml_T1, demo, by = "SubID")
+
+# gender
+gender <- df_T1 %>% dplyr::select(SubID, contains("GENDER"), -matches("GENDER_4_TEXT"))
+gender$GENDER[gender$GENDER == 1] <- "female"
+gender$GENDER[gender$GENDER == 2] <- "male"
+gender$GENDER[gender$GENDER == 3 | gender$GENDER == 4] <- "other"
+colnames(gender) <- c("SubID", "gender")
+
+df_ml_T1 <- left_join(df_ml_T1, gender, by = "SubID")
+
+# ethnicity
+ethnicity <- df_T1 %>% dplyr::select(SubID, contains("RACEETHN"))
+ethnicity$RACEETHN[ethnicity$RACEETHN == 1] <- "Hispanic"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 2] <- "White"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 3] <- "Black"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 4] <- "Native American"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 5] <- "Asian"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 6] <- "Pacific Islander"
+ethnicity$RACEETHN[ethnicity$RACEETHN == 7] <- "Other"
+colnames(ethnicity) <- c("SubID", "ethnicity", "ethnicityDescribe")
+
+df_ml_T1 <- left_join(df_ml_T1, ethnicity, by = "SubID")
+
+# education
+educationreduced <- df_T1 %>% # Initial mapping with grosser categories
+  dplyr::select(SubID, contains("EDUCATION")) %>%
+  mutate(
+    EDUCATION = case_when(
+      EDUCATION == 1 | EDUCATION == 2 | EDUCATION == 3 ~ "NoCollegeDegree",
+      EDUCATION %in% 4:7 ~ "YesCollegeDegree",
+      TRUE ~ EDUCATION
+    )
+  )
+colnames(educationreduced) <- c("SubID", "education")
+
+df_ml_T1 <- left_join(df_ml_T1, educationreduced, by = "SubID")
+
+educationfull <- df_T1 %>% # More detailed mapping
+  dplyr::select(SubID, contains("EDUCATION")) %>%
+  mutate(
+    EDUCATIONFULL = case_when(
+      EDUCATION == 1 ~ "Less than high school",
+      EDUCATION == 2 ~ "High school graduate or G.E.D.",
+      EDUCATION == 3 ~ "Some college",
+      EDUCATION == 4 ~ "Two-year college degree (A.A., A.S.)",
+      EDUCATION == 5 ~ "Four-year college degree (B.A., B.S.)",
+      EDUCATION == 6 ~ "Masters degree (for example, M.B.A., M.A., M.S.)",
+      EDUCATION == 7 ~ "Doctoral or professional degree (for example, Ph.D., M.D., J.D., D.V.M., D.D.M.)",
+      TRUE ~ EDUCATION  # This preserves the original value if none of the above groups are met
+    )
+  )
+
+colnames(educationfull) <- c("SubID", "education", "educationfull")
+educationfull <- educationfull[-2] 
+
+df_ml_T1 <- left_join(df_ml_T1, educationfull, by = "SubID")
+
+# employment
+employmentreduced <- df_T1 %>%
+  dplyr::select(SubID, contains("OCCSTAT")) %>%
+  mutate(
+    OCCSTAT = case_when(
+      OCCSTAT == 1 | OCCSTAT == 2 ~ "Employed",
+      OCCSTAT %in% c(3, 4, 7, 13) ~ "Other",
+      OCCSTAT %in% c(5, 6) ~ "Student",
+      OCCSTAT %in% c(8, 9, 10, 11, 12) ~ "Unemployed",
+      TRUE ~ OCCSTAT
+    )
+  )
+colnames(employmentreduced) <- c("SubID", "employment", "employmentDescribe")
+
+df_ml_T1 <- left_join(df_ml_T1, employmentreduced, by = "SubID")
+
+employmentfull <- df_T1 %>%
+  dplyr::select(SubID, contains("OCCSTAT"), -matches("TEXT")) %>%
+  mutate(
+    OCCSTATFULL = case_when(
+      OCCSTAT == 1 ~ "Employed full-time for pay",
+      OCCSTAT == 2 ~ "Employed part-time for pay",
+      OCCSTAT == 3 ~ "Homemaker",
+      OCCSTAT == 4 ~ "Retired",
+      OCCSTAT == 5 ~ "Full-time student",
+      OCCSTAT == 6 ~ "Part-time student",
+      OCCSTAT == 7 ~ "Leave of absence for medical reasons",
+      OCCSTAT == 8 ~ "Unemployed less than 6 months, do not expect to work",
+      OCCSTAT == 9 ~ "Unemployed more than 6 months, do not expect to work",
+      OCCSTAT == 10 ~ "Unemployed less than 6 months, expects to work",
+      OCCSTAT == 11 ~ "Unemployed more than 6 months, expects to work",
+      OCCSTAT == 12 ~ "Laid off",
+      OCCSTAT == 13 ~ "Other",
+      TRUE ~ OCCSTAT
+    )
+  )
+colnames(employmentfull) <- c("SubID", "employment", "employmentfull")
+employmentfull <- employmentfull[-2] 
+
+df_ml_T1 <- left_join(df_ml_T1, employmentfull, by = "SubID")
+
+# income
+incomereduced <- df_T1 %>%
+  dplyr::select(SubID, contains("INCOME")) %>%
+  mutate(
+    INCOME = case_when(
+      INCOME %in% 1:6 ~ "Lower",
+      INCOME %in% 7:9 ~ "Upper",
+      INCOME == 10 ~ "Dont_know",
+      TRUE ~ INCOME
+    )
+  )
+colnames(incomereduced) <- c("SubID", "income")
+
+df_ml_T1 <- left_join(df_ml_T1, incomereduced, by = "SubID")
+
+
+incomefull <- df_T1 %>%
+  dplyr::select(SubID, contains("INCOME")) %>%
+  mutate(
+    INCOMEFULL = case_when(
+      INCOME == 1 ~ "Under $5,000",
+      INCOME == 2 ~ "$5,000 - $9,999",
+      INCOME == 3 ~ "$10,000 - $14,999",
+      INCOME == 4 ~ "$15,000 - $24,999",
+      INCOME == 5 ~ "$25,000 - $39,999",
+      INCOME == 6 ~ "$40,000 - $59,999",
+      INCOME == 7 ~ "$60,000 - $89,999",
+      INCOME == 8 ~ "$90,000 - $179,999",
+      INCOME == 9 ~ "Over $180,000",
+      INCOME == 10 ~ "Dont know",
+      TRUE ~ INCOME
+    )
+  )
+colnames(incomefull) <- c("SubID", "income", "incomefull")
+incomefull <- incomefull[-2]
+
+df_ml_T1 <- left_join(df_ml_T1, incomefull, by = "SubID")
+
+# religion
+religion <- df_T1 %>% dplyr::select(SubID, contains("REL"), -matches("RELAFF_11_TEXT"))
+religion$RELAFF[religion$RELAFF == 1] <- "Protestant"
+religion$RELAFF[religion$RELAFF == 2] <- "Roman Catholic"
+religion$RELAFF[religion$RELAFF == 3] <- "Mormon"
+religion$RELAFF[religion$RELAFF == 4] <- "Orthodox"
+religion$RELAFF[religion$RELAFF == 5] <- "Jewish"
+religion$RELAFF[religion$RELAFF == 6] <- "Muslim"
+religion$RELAFF[religion$RELAFF == 7] <- "Buddhist"
+religion$RELAFF[religion$RELAFF == 8] <- "Hindu"
+religion$RELAFF[religion$RELAFF == 9] <- "Atheist"
+religion$RELAFF[religion$RELAFF == 10] <- "Agnostic"
+religion$RELAFF[religion$RELAFF == 11] <- "Other"
+religion$RELAFF[religion$RELAFF == 12] <- "Nothing"
+
+colnames(religion) <- c("SubID", "religionAffiliation", "religionStrength")
+
+df_ml_T1 <- left_join(df_ml_T1, religion, by = "SubID")
+
+handedness <- df_T1 %>% dplyr::select(SubID, contains("HAND"))
+handedness$HAND[handedness$HAND == 1] <- "Right"
+handedness$HAND[handedness$HAND == 2] <- "Left"
+handedness$HAND[handedness$HAND == 3] <- "Both"
+
+colnames(handedness) <- c("SubID", "handedness")
+
+df_ml_T1 <- left_join(df_ml_T1, handedness, by = "SubID")
+
+# Generate dummy variables "Female", "Male", and "Other"
+df_ml_T1$Female <- 0
+df_ml_T1$Female[df_ml_T1$gender == "female"] <- 1
+
+df_ml_T1$Male <- 0
+df_ml_T1$Male[df_ml_T1$gender == "male"] <- 1
+
+df_ml_T1$Other_gender <- 0
+df_ml_T1$Other_gender[df_ml_T1$gender == "other"] <- 1
+
+#education dummys
+df_ml_T1$NoCollegeDegree <- 0
+df_ml_T1$NoCollegeDegree[grepl("NoCollegeDegree", df_ml_T1$education)] <- 1
+
+df_ml_T1$YesCollegeDegree  <- 0
+df_ml_T1$YesCollegeDegree [grepl("YesCollegeDegree", df_ml_T1$education)] <- 1
+
+#income dummy 
+df_ml_T1$Lower <- 0
+df_ml_T1$Lower[grepl("Lower", df_ml_T1$income)] <- 1
+
+df_ml_T1$Upper <- 0
+df_ml_T1$Upper[grepl("Upper", df_ml_T1$income)] <- 1
+
+df_ml_T1$Dont_know <- 0
+df_ml_T1$Dont_know[grepl("Dont_know", df_ml_T1$income)] <- 1
+
+# employment dummy
+df_ml_T1$Employed <- 0
+df_ml_T1$Employed[grepl("Employed", df_ml_T1$employment)] <- 1
+
+df_ml_T1$Unemployed <- 0
+df_ml_T1$Unemployed[grepl("Unemployed", df_ml_T1$employment)] <- 1
+
+df_ml_T1$Student <- 0
+df_ml_T1$Student[grepl("Student", df_ml_T1$employment)] <- 1
+
+df_ml_T1$Other_employment <- 0
+df_ml_T1$Other_employment[grepl("Other", df_ml_T1$employment)] <- 1
+
+# Generate dummy variables for ethnicity
+df_ml_T1$White <- as.integer(df_ml_T1$ethnicity == "White") #count as white even though also said asian
+df_ml_T1$Black <- as.integer(df_ml_T1$ethnicity == "Black") #count as black even though also said other
+df_ml_T1$Hispanic <- as.integer(df_ml_T1$ethnicity == "Hispanic") #count as hispanic even though also said white
+df_ml_T1$OtherRace <- as.integer(df_ml_T1$ethnicity == "Other" | df_ml_T1$ethnicity == "Pacific Islander" | df_ml_T1$ethnicity == "Native American" | df_ml_T1$ethnicity == "2,3,4" | df_ml_T1$ethnicity == "2,7" | df_ml_T1$ethnicity == "2,5" | df_ml_T1$ethnicity == "3,7" | df_ml_T1$ethnicity == "3,4" | df_ml_T1$ethnicity == "2,3" | df_ml_T1$ethnicity == "1,2" | df_ml_T1$ethnicity == "1,2,4" | df_ml_T1$ethnicity == "1,7") # count as other 
+df_ml_T1$Asian <- as.integer(df_ml_T1$ethnicity == "Asian") #count as Asian even though also said White
+
+# make sure to only have one ethnicity by the end for simplicity
+df_ml_T1 <- df_ml_T1 %>%
+  mutate(
+    ethnicity = case_when(
+      str_detect(ethnicity, "1") ~ "Hispanic",
+      str_detect(ethnicity, "5") ~ "Asian",
+      str_detect(ethnicity, "3") ~ "Black",
+      str_detect(ethnicity, "Native") ~ "Other",
+      str_detect(ethnicity, "Pacific") ~ "Other",
+      TRUE ~ ethnicity
+    )
+  )
+
+# make sure to only one occupational status
+df_ml_T1 <- df_ml_T1 %>%
+  mutate(
+    employment = case_when(
+      str_detect(employment, "1|2") ~ "Employed",
+      str_detect(employment, "5|6") ~ "Student",
+      str_detect(employment, "3|4|7") ~ "Other",
+      str_detect(employment, "8|9|10|11|12") ~ "Unemployed",
+      TRUE ~ employment
+    )
+  )
+
+# make sure you make dummies for gender as well
+df_ml_T1$Female <- ifelse(df_ml_T1$gender=="female", 1, 0)
+df_ml_T1$Male <- ifelse(df_ml_T1$gender=="male", 1, 0)
+df_ml_T1$Other <- ifelse(df_ml_T1$gender=="other", 1, 0)
+
+
+```
+
+### 1.6. exclusion variables and saving the file as csv
+
+```{r, message = FALSE}
+# control questions
+control <- df_T1 %>% dplyr::select(SubID, contains("RECRUIT"), contains("OPEN"), contains("COMMIT"),
+                                        contains("ATTN_1"), # in SCS (strongly agree - 6)
+                                        contains("ATTN_2"), # in IRI (does not describe me well - A)
+                                        contains("ATTN_3")) # in UCLA (rarely - 2)
+
+colnames(control) <- c("SubID", "recruited", "openQuestion", "commitmentRequest", "attentionCheck1_T1", "attentionCheck2_T1", "attentionCheck3_T1")
+
+df_ml_T1 <- left_join(df_ml_T1, control, by = "SubID")
+
+write.csv(df_ml_T1, file.path(path, "clean/cleandata_T1.csv"))
+
+
+```
+
+# 2. 4 Week Survey (T2)
+
+### 2.1. import data from T2 (Week 4, post intervention)
+
+```{r, message = FALSE}
+
+# import data from four week survey
+df_T2 <- read.csv(file.path(path, "raw/rawdata_T2_4weeks_postIntervention.csv"), header = T) 
+
+# SubID 009 completed the survey twice, so we only count the first time they did it 
+df_T2 <- df_T2[!df_T2$ResponseId == "R_28GJqKvSCZZ79NN",]
+
+```
+
+### 2.2. gross clean and initial exclusions
+
+```{r, message = FALSE}
+
+# gross clean
+df_T2 <- df_T2[grepl("ML", df_T2$id),] # exclude empty id rows
+df_T2 <- df_T2[grepl(1, df_T2$Finished),] # exclude unfinished surveys
+colnames(df_T2) <- gsub("id", "SubID", colnames(df_T2))
+df_T2 <- df_T2 %>%
+  dplyr::select(SubID, everything()) # move SubID to first row
+df_T2$SubID <- gsub("ML", "", df_T2$SubID) 
+df_T2$SubID <- as.numeric(df_T2$SubID) # remove prefix ML and make numeric
+df_T2 <- df_T2[order(df_T2$SubID),] # reorder according to SubID
+
+# SubID 196 filled out week4 twice, so we remove the second attempt 
+df_T2 <- df_T2[!df_T2$ResponseId == "R_xcnqvWuCDanFimZ",]
+
+```
+
+### 2.3. select variables of interest
+
+```{r, message = FALSE}
+
+# SCS
+socialConnectedness <- df_T2 %>% dplyr::select(SubID, contains("SCS2"), -matches("_T_"))
+reverse_cols <- c("SCS2_1", "SCS2_2", "SCS2_3", "SCS2_4","SCS2_5", "SCS2_6", "SCS2_8","SCS2_10","SCS2_15", "SCS2_18")
+socialConnectedness <- data.frame(apply(socialConnectedness, 2, as.numeric))
+socialConnectedness[,reverse_cols] <- 7 - socialConnectedness[,reverse_cols] # reverse code
+df_long_socialConnectedness <- melt(setDT(socialConnectedness), id.vars = "SubID") # long format
+df_long_socialConnectedness <- df_long_socialConnectedness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(socialConnectedness_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- df_long_socialConnectedness
+
+# UCLA
+loneliness <- df_T2 %>% dplyr::select(SubID, contains("UCLA2"), -matches("_T_"))
+reverse_cols <- c("UCLA2_1", "UCLA2_5", "UCLA2_9", "UCLA2_10","UCLA2_15", "UCLA2_16", "UCLA2_19","UCLA2_20")
+loneliness <- data.frame(apply(loneliness, 2, as.numeric))
+loneliness[, reverse_cols] <- 5 - loneliness[, reverse_cols] # reverse code
+df_long_loneliness <- melt(setDT(loneliness), id.vars = "SubID") # long format
+df_long_loneliness <- df_long_loneliness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(loneliness_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_loneliness, by = "SubID")
+
+
+# IRI
+traitEmpathyIRI <- df_T2 %>% dplyr::select(SubID, contains("IRI2"), -matches("_T_"))
+df_long_traitEmpathyIRI <- melt(setDT(traitEmpathyIRI), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI$value = as.numeric(df_long_traitEmpathyIRI$value) # numeric
+df_long_traitEmpathyIRI <- df_long_traitEmpathyIRI %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_traitEmpathyIRI, by = "SubID")
+
+#IRI subscales
+#Fantasy
+df_traitEmpathyIRI_fant <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_1","IRI2_5", "IRI2_7", "IRI2_12", "IRI2_16", "IRI2_23", "IRI2_26")
+df_long_traitEmpathyIRI_fant <- melt(setDT(df_traitEmpathyIRI_fant), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_fant$value = as.numeric(df_long_traitEmpathyIRI_fant$value)
+df_long_traitEmpathyIRI_fant <- df_long_traitEmpathyIRI_fant %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_fant_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_traitEmpathyIRI_fant, by = "SubID")
+
+#Perspective-taking
+df_traitEmpathyIRI_PT <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_3","IRI2_8", "IRI2_11", "IRI2_15", "IRI2_21", "IRI2_25", "IRI2_28")
+df_long_traitEmpathyIRI_PT <- melt(setDT(df_traitEmpathyIRI_PT), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PT$value = as.numeric(df_long_traitEmpathyIRI_PT$value)
+df_long_traitEmpathyIRI_PT <- df_long_traitEmpathyIRI_PT %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PT_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_traitEmpathyIRI_PT, by = "SubID")
+
+#Empathic Concern
+df_traitEmpathyIRI_EC <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_2","IRI2_4", "IRI2_9", "IRI2_14", "IRI2_18", "IRI2_20", "IRI2_22")
+df_long_traitEmpathyIRI_EC <- melt(setDT(df_traitEmpathyIRI_EC), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_EC$value = as.numeric(df_long_traitEmpathyIRI_EC$value)
+df_long_traitEmpathyIRI_EC <- df_long_traitEmpathyIRI_EC %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_EC_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_traitEmpathyIRI_EC, by = "SubID")
+
+#Personal Distress
+df_traitEmpathyIRI_PD <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_6","IRI2_10", "IRI2_13", "IRI2_17", "IRI2_19", "IRI2_24", "IRI2_27")
+df_long_traitEmpathyIRI_PD <- melt(setDT(df_traitEmpathyIRI_PD), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PD$value = as.numeric(df_long_traitEmpathyIRI_PD$value)
+df_long_traitEmpathyIRI_PD <- df_long_traitEmpathyIRI_PD %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PD_mean_T2 = mean)) # calculate mean per participant
+
+df_ml_T2 <- left_join(df_ml_T2, df_long_traitEmpathyIRI_PD, by = "SubID")
+
+# IOS
+inclusionOtherSelf <- df_T2 %>% dplyr::select(SubID, contains("IOS2"))
+inclusionOtherSelf$IOS2_1b <- as.numeric(inclusionOtherSelf$IOS2_1b)
+inclusionOtherSelf$IOS2_2b <- as.numeric(inclusionOtherSelf$IOS2_2b)
+inclusionOtherSelf$IOS2_3b <- as.numeric(inclusionOtherSelf$IOS2_3b)
+inclusionOtherSelf$IOS2_4b <- as.numeric(inclusionOtherSelf$IOS2_4b)
+inclusionOtherSelf$IOS2_5 <- as.numeric(inclusionOtherSelf$IOS2_5)
+inclusionOtherSelf$inclusionOtherSelf_mean <- rowMeans(inclusionOtherSelf[,c("IOS2_1b", "IOS2_2b", "IOS2_3b", "IOS2_4b", "IOS2_5")])
+inclusionOtherSelf$inclusionOtherSelf_mean_nostranger <- rowMeans(inclusionOtherSelf[,c("IOS2_1b", "IOS2_2b", "IOS2_3b", "IOS2_4b")])
+colnames(inclusionOtherSelf) <- c("SubID", "IOS_immediateFamily_T2", "IOS_immediateFamilyNum_T2", "IOS_extendedFamily_T2", "IOS_extendedFamilyNum_T2", "IOS_friend_T2", "IOS_friendNum_T2", "IOS_acquaintance_T2", "IOS_acquaintanceNum_T2", "IOS_strangerNum_T2", "inclusionOtherSelf_mean_T2", "inclusionOtherSelf_mean_nostranger_T2")
+
+df_ml_T2 <- left_join(df_ml_T2, inclusionOtherSelf, by = "SubID")
+
+# Cantrill wellbeing ladder
+wellbeing <- df_T2 %>% dplyr::select(SubID, contains("LADDER"))
+wellbeing$LADDER_PRESENT2 <- as.numeric(as.character(wellbeing$LADDER_PRESENT2))
+wellbeing$LADDER_FUTURE2  <- as.numeric(as.character(wellbeing$LADDER_FUTURE2))
+wellbeing$wellbeing_mean_T2 <- rowMeans(wellbeing[, c("LADDER_PRESENT2", "LADDER_FUTURE2")], na.rm = TRUE)
+colnames(wellbeing) <- c("SubID", "wellbeingPresent_T2", "wellbeingFuture_T2", "wellbeing_mean_T2")
+
+df_ml_T2 <- left_join(df_ml_T2, wellbeing, by = "SubID")
+
+```
+
+
+### 2.4. exclusion variables and saving the file as csv
+
+```{r, message = FALSE}
+
+# control questions
+attention <- df_T2 %>% dplyr::select(SubID, contains("ATTN2_1"), # in SCS (strongly agree - 6)
+                                                contains("ATTN2_2"), # in IRI (does not describe me well - A)
+                                                contains("ATTN2_3")) # in UCLA (rarely - 2)
+colnames(attention) <- c("SubID", "attentionCheck1_T2", "attentionCheck2_T2", "attentionCheck3_T2")
+
+df_ml_T2 <- left_join(df_ml_T2, attention, by = "SubID")
+
+# save the file to csv 
+write.csv(df_ml_T1, file.path(path, "clean/cleandata_T2.csv"))
+
+
+```
+
+# 3. Scan Day
+
+### 3.1. Scan Day Survey 
+
+#### 3.1.1. import data from the scanday qualtrics survey (the survey they completed after the scan)
+
+```{r, message = FALSE}
+# import data from the scan day survey 
+df_scanSurvey <- read.csv(file.path(path, "raw/rawdata_scandaySurvey.csv"), header = T) 
+
+```
+
+#### 3.1.2. gross clean and initial exclusions
+
+```{r, message = FALSE}
+# gross clean
+df_scanSurvey <- df_scanSurvey[grepl("ML", df_scanSurvey$id),] # exclude empty id rows
+df_scanSurvey <- df_scanSurvey[grepl(1, df_scanSurvey$Finished),] # exclude unfinished surveys
+colnames(df_scanSurvey) <- gsub("id", "SubID", colnames(df_scanSurvey))
+df_scanSurvey <- df_scanSurvey %>%
+  dplyr::select(SubID, everything()) # move SubID to first row
+df_scanSurvey$SubID <- gsub("ML", "", df_scanSurvey$SubID) 
+df_scanSurvey$SubID <- as.numeric(df_scanSurvey$SubID) # remove ML prefix and make numeric
+df_scanSurvey <- df_scanSurvey[order(df_scanSurvey$SubID),] # reorder according to SubID
+
+# SubID 9 completed the study twice, so we remove the second attempt (this person gets excluded anyways for falling asleep during the scan)
+df_scanSurvey <- df_scanSurvey[!df_scanSurvey$ResponseId == "R_24dbzIIjZohhm4j",]
+
+```
+
+#### 3.1.3. select variables of interest 
+
+```{r, message = FALSE}
+
+# subjective ratings, based on which we make state empathy variable later on 
+subjectiveRatings <- df_scanSurvey %>% dplyr::select(SubID, contains("PE"), -matches("_T_"))
+colnames(subjectiveRatings) <- c("SubID", "self_fearOfPain", "self_fearNoPain", "self_unpleasantPain", "self_unpleasantNoPain", "other_fearOfPain", "other_fearNoPain", "other_unpleasantPain", "other_unpleasantNoPain")
+
+# calculate state empathy by taking the difference between observed and experienced rating and then taking the absolute (so direction does not matter) value and then taking the inverse because higher difference between you + me = less similarity aka empathy. multiplying stateEmp_fear (the difference between observed and experienced self-reported empathy) by -1 effectively reverses its interpretation. Originally, higher values indicated greater differences between observing and experiencing pain. By inverting the scale (multiplying by -1), higher values now indicate greater similarity between the two conditions.
+subjectiveRatings$stateEmp_fear <- abs(abs(as.numeric(subjectiveRatings$self_fearOfPain) - as.numeric(subjectiveRatings$self_fearNoPain)) - abs(as.numeric(subjectiveRatings$other_fearOfPain) - as.numeric(subjectiveRatings$self_fearNoPain)))
+
+subjectiveRatings$stateEmp_painUnpleasant <- abs(abs(as.numeric(subjectiveRatings$self_unpleasantPain) - as.numeric(subjectiveRatings$self_unpleasantNoPain)) - abs(as.numeric(subjectiveRatings$other_unpleasantPain) - as.numeric(subjectiveRatings$self_unpleasantNoPain)))
+
+subjectiveRatings$stateEmp_fear <- subjectiveRatings$stateEmp_fear * (-1)
+subjectiveRatings$stateEmp_painUnpleasant <- subjectiveRatings$stateEmp_painUnpleasant * (-1)
+
+df_ml_scanSurvey <- left_join(df_scanSurvey, subjectiveRatings, by = "SubID")
+
+# IOS
+inclusionOtherSelf <- df_scanSurvey %>% dplyr::select(SubID, contains("IOS"))
+colnames(inclusionOtherSelf) = c("SubID", "IOS_studyPartner")
+
+df_ml_scanSurvey <- left_join(df_ml_scanSurvey, inclusionOtherSelf, by = "SubID")
+
+# study partner impressions 
+studyPartner <- df_scanSurvey %>% dplyr::select(SubID, contains("Q590"), -matches("_T_"))
+colnames(studyPartner) <- c("SubID", "studyPartnerLiking", "studyPartnerReal")
+
+df_ml_scanSurvey <- left_join(df_ml_scanSurvey, studyPartner, by = "SubID")
+
+
+```
+
+#### 3.1.4. exclusion variables and saving the file as csv
+
+```{r, message = FALSE}
+
+# control variables 
+df_control <- df_ml_scanSurvey %>% dplyr::select(SubID, Q595, Q589, Q591, ATTNS_2)
+colnames(df_control) <- c("SubID", "medication", "guessStudy", "anythingElse", "attentionCheck_scanday")
+
+df_ml_scanSurvey <- left_join(df_ml_scanSurvey, df_control, by = "SubID")
+
+# write to csv
+write.csv(df_ml_scanSurvey, file.path(path, "clean/cleandata_scandaySurvey.csv"))
+
+```
+
+### 3.2. Scan Day Info
+
+#### 3.2.1. import data from scanday spreadsheet with all the experimenter information 
+
+```{r, message = FALSE}
+
+# spreadsheet
+df_scanInfo <- read.csv(file.path(path, "raw/rawdata_scandayInfo.csv"), header = T) 
+
+# gross clean
+colnames(df_scanInfo)[1] <- "SubID"
+df_scanInfo$SubID <- gsub("ML", "", df_scanInfo$SubID) 
+df_scanInfo$SubID <- as.numeric(df_scanInfo$SubID) # remove ML and make numeric
+df_scanInfo <- df_scanInfo[order(df_scanInfo$SubID),] # reorder according to SubID
+
+# dplyr::select variables of interest 
+runOrder <- df_scanInfo[ , grepl("Task..1|Task..2", names(df_scanInfo))]
+studyPartnerName <- df_scanInfo$Study.Partner
+PSI <- df_scanInfo$Slightly.Intense.PSI
+anythingElseScan <- df_scanInfo$Anything.to.Note.About.the.Scan.
+
+# Extract columns for Task 1 and Task 2 pain ratings --> state empathy pain 
+painRating1 <- df_scanInfo[, grepl("Task..1.Pain.Rating", names(df_scanInfo))]
+painRating2 <- df_scanInfo[, grepl("Task..2.Pain.Rating", names(df_scanInfo))]
+
+# Initialize new columns for self and other pain ratings
+df_scanInfo$painRatingSelf <- NA
+df_scanInfo$painRatingOther <- NA
+
+# Iterate over each row to assign self and other pain ratings based on run1group
+for (i in 1:nrow(df_scanInfo)) {
+  if (df_scanInfo$Task..1[i] == "Participant") {
+    df_scanInfo$painRatingSelf[i] <- painRating1[i]
+    df_scanInfo$painRatingOther[i] <- painRating2[i]
+  } else if (df_scanInfo$Task..1[i] == "Study Partner") {
+    df_scanInfo$painRatingSelf[i] <- painRating2[i]
+    df_scanInfo$painRatingOther[i] <- painRating1[i]
+  }
+}
+
+# View the updated dataframe
+head(df_scanInfo)
+
+
+df_scanInfo <- cbind(df_scanInfo$SubID, runOrder, studyPartnerName, PSI, anythingElseScan, painRating1, painRating2, df_scanInfo$painRatingSelf, df_scanInfo$painRatingOther)
+
+colnames(df_scanInfo) <- c("SubID", "run1group", "run1eprime", "run2group", "run2eprime", "run1empathy", "run2empathy", "studyPartnerName", "PSI", "anythingElseScan", "painRating1", "painRating2", "painRatingSelf", "painRatingOther")
+
+# calculate state empathy for pain, which was assessed in the scanner after each run 
+df_scanInfo$stateEmp_painRating <- abs(as.numeric(df_scanInfo$painRatingSelf) - as.numeric(df_scanInfo$painRatingOther))
+
+df_scanInfo$stateEmp_painRating <- df_scanInfo$stateEmp_painRating * (-1)
+
+# write to csv
+write.csv(df_scanInfo, file.path(path, "clean/cleandata_scandayInfo.csv")) 
+
+```
+
+### 3.3. Meditation Info
+
+#### 3.3.1. import data sheet with the meditation group assignments 
+
+```{r, message = FALSE}
+
+# Load and clean group assignment file 
+df_medGroup <- read.csv(file.path(path, "raw/meditationGroupAssignment.csv"), header = T) 
+names(df_medGroup)[names(df_medGroup) == "subnum"] <- "SubID"
+names(df_medGroup)[names(df_medGroup) == "condition"] <- "GroupID"
+df_medGroup$SubID <- gsub("ML", "", df_medGroup$SubID) 
+df_medGroup$SubID <- as.numeric(df_medGroup$SubID) # remove ML and make numeric
+df_medGroup <- df_medGroup[order(df_medGroup$SubID),] # reorder according to SubID
+
+# from other spreadsheet we know that pp 139 is GroupID LKM <- 1, so let's change this to the correct assignment 
+# Replace the value in the 'GroupID' column where 'SubID' is 139 with 2
+df_medGroup$GroupID[df_medGroup$SubID == 139] <- 1
+
+df_medGroup$GroupID
+
+```
+
+#### 3.3.2. import data sheet with the meditation group assignments from the meditation tracking sheet
+
+```{r, message = FALSE}
+
+# Load and clean meditation tracking also with GroupID assignment 
+df_medTracking <- read.csv(file.path(path, "raw/meditationTracking_sheet1.csv"), header = T) 
+
+# Remove rows where any column contains "Sent" or "Completed"
+df_medTracking <- df_medTracking[!apply(df_medTracking, 1, function(row) any(row %in% c("Sent", "Completed"))), ] 
+df_medTracking <- df_medTracking[df_medTracking$X != "", ] # Remove rows where X column is empty
+df_medTracking <- df_medTracking[, 1:2]  
+colnames(df_medTracking) <- c("SubID", "GroupID") # Select only the first two columns and rename them
+
+# Replace "LKM" with 1 and "PMR" with 2 in the group column
+df_medTracking$GroupID <- ifelse(df_medTracking$GroupID == "LKM", 1, 2) 
+
+# Remove the "ML" prefix in SubID and convert to numeric
+df_medTracking$SubID <- as.numeric(gsub("ML", "", df_medTracking$SubID)) 
+
+# View the cleaned data
+head(df_medTracking)
+
+df_medTracking$GroupID
+
+```
+
+#### 3.3.3. cross-check them against each other 
+
+```{r, message = FALSE}
+
+# Find discrepancies between the two dataframes based on SubID and GroupID
+discrepancies <- merge(df_medGroup, df_medTracking, by = "SubID", suffixes = c("_MC", "_medtracking"))
+discrepancies <- discrepancies[discrepancies$GroupID_MC != discrepancies$GroupID_medtracking, ]
+
+# Print the discrepancies
+if (nrow(discrepancies) > 0) {
+  print(discrepancies[, c("SubID", "GroupID_MC", "GroupID_medtracking")])
+} else {
+  print("No discrepancies found.")
+}
+
+# Identify discrepancies between df_medGroupID and df_medTracking
+discrepancies <- merge(df_medGroup, df_medTracking, by = "SubID", suffixes = c("_MC", "_medtracking"))
+discrepancies <- discrepancies[discrepancies$GroupID_MC != discrepancies$GroupID_medtracking, ]
+
+# use the ones that were in meditation tracking to replace the incorrect ones in meditation GroupID assignment 
+df_medGroup$GroupID[df_medGroup$SubID == 121] <- 1
+df_medGroup$GroupID[df_medGroup$SubID == 141] <- 2
+
+# View the updated df_medGroup
+head(df_medGroup)
+
+# give meaningful labels
+df_medGroup$GroupID[df_medGroup$GroupID == 1] = "LKM"
+df_medGroup$GroupID[df_medGroup$GroupID == 2] = "PMR"
+
+```
+
+### 3.3.4. meditation tracking data frame 
+
+```{r, message = FALSE}
+
+# medFinish: was the meditation finished?
+# medStart: when did the pp start the meditation?
+# medEnd: when did the pp end the meditation?
+# medNumCompleted: how many meditations were completed?
+# medPercentageCompleted: what percentage of meditations were completed?
+
+# Import meditation tracking again 
+df_medTracking <- read.csv(file.path(path, "raw/meditationTracking_sheet2.csv"), header = TRUE)
+
+
+# Change column names
+colnames(df_medTracking) <- c("SubID", "medFinish", "medStart", "medEnd", "medNumCompleted", "medPercentageCompleted")
+
+# Clean 'SubID' column
+df_medTracking$SubID <- gsub("ML", "", df_medTracking$SubID)
+df_medTracking$SubID <- as.numeric(df_medTracking$SubID)
+
+# Clean 'medPercentageCompleted' column
+df_medTracking$medPercentageCompleted <- gsub("%", "", df_medTracking$medPercentageCompleted)  # Remove percentage signs
+df_medTracking$medPercentageCompleted[df_medTracking$medPercentageCompleted == "?"] <- NA  # Convert '?' to NA
+df_medTracking$medPercentageCompleted <- as.numeric(df_medTracking$medPercentageCompleted)  # Convert to numeric
+
+# Convert 'medNumCompleted' column to numeric
+df_medTracking$medNumCompleted <- as.numeric(as.character(df_medTracking$medNumCompleted))
+
+# Check the cleaned data
+print(df_medTracking$medNumCompleted)
+print(df_medTracking$medPercentageCompleted)
+
+
+```
+
+### 3.4. Medication Info
+
+Medication people took on scan day 
+```{r, message = FALSE}
+
+# import data
+df_medicationInfo <- read.csv(file.path(path, "raw/rawdata_medication.csv"), header = TRUE)
+
+df_medicationInfo <- df_medicationInfo[, -((ncol(df_medicationInfo)-3):ncol(df_medicationInfo))]
+
+# change column names: 
+colnames(df_medicationInfo) <- c("SubID", "medicationsScanday")
+
+# SubID clean
+df_medicationInfo$SubID <- gsub("ML", "", df_medicationInfo$SubID) 
+
+# make numeric
+df_medicationInfo$SubID <- as.numeric(df_medicationInfo$SubID)
+
+
+```
+
+
+# 4. 6 months Survey (T3)
+
+### 4.1. import data from the 6-months follow-up survey
+
+```{r, message = FALSE}
+# import data from the 6 months follow-up survey 
+df_T3 <- read.csv(file.path(path, "raw/rawdata_T3_6months_postIntervention.csv"), header = TRUE)
+
+```
+
+### 4.2. gross clean and initial exclusions
+
+```{r, message = FALSE}
+# gross clean
+df_T3 <- df_T3[grepl("ML", df_T3$id),] # exclude empty id rows
+df_T3 <- df_T3[grepl(1, df_T3$Finished),] # exclude unfinished surveys
+colnames(df_T3) <- gsub("id", "SubID", colnames(df_T3))
+df_T3 <- df_T3 %>%
+  dplyr::select(SubID, everything()) # move SubID to first row
+df_T3$SubID <- gsub("ML", "", df_T3$SubID) 
+df_T3$SubID <- as.numeric(df_T3$SubID) # remove ML prefix and make numeric
+df_T3 <- df_T3[order(df_T3$SubID),] # reorder according to SubID
+
+```
+
+### 4.3. select variables of interest
+
+```{r, message = FALSE}
+
+# SCS
+socialConnectedness <- df_T3 %>% dplyr::select(SubID, contains("SCS2"), -matches("_T_"))
+reverse_cols <- c("SCS2_1", "SCS2_2", "SCS2_3", "SCS2_4","SCS2_5", "SCS2_6", "SCS2_8","SCS2_10","SCS2_15", "SCS2_18")
+socialConnectedness <- data.frame(apply(socialConnectedness, 2, as.numeric))
+socialConnectedness[,reverse_cols] <- 7 - socialConnectedness[,reverse_cols] # reverse code
+df_long_socialConnectedness <- melt(setDT(socialConnectedness), id.vars = "SubID") # long format
+df_long_socialConnectedness <- df_long_socialConnectedness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(socialConnectedness_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- df_long_socialConnectedness
+
+# UCLA
+loneliness <- df_T3 %>% dplyr::select(SubID, contains("UCLA2"), -matches("_T_"))
+reverse_cols <- c("UCLA2_1", "UCLA2_5", "UCLA2_9", "UCLA2_10","UCLA2_15", "UCLA2_16", "UCLA2_19","UCLA2_20")
+loneliness <- data.frame(apply(loneliness, 2, as.numeric))
+loneliness[, reverse_cols] <- 5 - loneliness[, reverse_cols] # reverse code
+df_long_loneliness <- melt(setDT(loneliness), id.vars = "SubID") # long format
+df_long_loneliness <- df_long_loneliness %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(loneliness_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_loneliness, by = "SubID")
+
+# IRI
+traitEmpathyIRI <- df_T3 %>% dplyr::select(SubID, contains("IRI2"), -matches("_T_"))
+df_long_traitEmpathyIRI <- melt(setDT(traitEmpathyIRI), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI$value = as.numeric(df_long_traitEmpathyIRI$value) # numeric
+df_long_traitEmpathyIRI <- df_long_traitEmpathyIRI %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_traitEmpathyIRI, by = "SubID")
+
+#IRI subscales
+#Fantasy
+df_traitEmpathyIRI_fant <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_1","IRI2_5", "IRI2_7", "IRI2_12", "IRI2_16", "IRI2_23", "IRI2_26")
+df_long_traitEmpathyIRI_fant <- melt(setDT(df_traitEmpathyIRI_fant), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_fant$value = as.numeric(df_long_traitEmpathyIRI_fant$value)
+df_long_traitEmpathyIRI_fant <- df_long_traitEmpathyIRI_fant %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_fant_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_traitEmpathyIRI_fant, by = "SubID")
+
+#Perspective-taking
+df_traitEmpathyIRI_PT <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_3","IRI2_8", "IRI2_11", "IRI2_15", "IRI2_21", "IRI2_25", "IRI2_28")
+df_long_traitEmpathyIRI_PT <- melt(setDT(df_traitEmpathyIRI_PT), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PT$value = as.numeric(df_long_traitEmpathyIRI_PT$value)
+df_long_traitEmpathyIRI_PT <- df_long_traitEmpathyIRI_PT %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PT_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_traitEmpathyIRI_PT, by = "SubID")
+
+#Empathic Concern
+df_traitEmpathyIRI_EC <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_2","IRI2_4", "IRI2_9", "IRI2_14", "IRI2_18", "IRI2_20", "IRI2_22")
+df_long_traitEmpathyIRI_EC <- melt(setDT(df_traitEmpathyIRI_EC), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_EC$value = as.numeric(df_long_traitEmpathyIRI_EC$value)
+df_long_traitEmpathyIRI_EC <- df_long_traitEmpathyIRI_EC %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_EC_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_traitEmpathyIRI_EC, by = "SubID")
+
+#Personal Distress
+df_traitEmpathyIRI_PD <- traitEmpathyIRI %>% dplyr::select("SubID","IRI2_6","IRI2_10", "IRI2_13", "IRI2_17", "IRI2_19", "IRI2_24", "IRI2_27")
+df_long_traitEmpathyIRI_PD <- melt(setDT(df_traitEmpathyIRI_PD), id.vars = "SubID") # long format
+df_long_traitEmpathyIRI_PD$value = as.numeric(df_long_traitEmpathyIRI_PD$value)
+df_long_traitEmpathyIRI_PD <- df_long_traitEmpathyIRI_PD %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(traitEmpathyIRI_PD_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_traitEmpathyIRI_PD, by = "SubID")
+
+# LKC
+lovingKindnessCompassion <- df_T3 %>% dplyr::select(SubID, contains("LKC2"), -matches("_T_"))
+reverse_cols <- c("LKC2_3", "LKC2_4", "LKC2_7", "LKC2_11","LKC2_13", "LKC2_15")
+lovingKindnessCompassion <- data.frame(apply(lovingKindnessCompassion, 2, as.numeric))
+lovingKindnessCompassion[, reverse_cols] <- 5 - lovingKindnessCompassion[, reverse_cols] # reverse code
+df_long_lovingKindnessCompassion <- melt(setDT(lovingKindnessCompassion), id.vars = "SubID") # long format
+df_long_lovingKindnessCompassion <- df_long_lovingKindnessCompassion %>%
+  group_by(SubID)%>%
+  summarise_at(vars(value), list(lovingKindnessCompassion_mean_T3 = mean)) # calculate mean per participant
+
+df_ml_T3 <- left_join(df_ml_T3, df_long_lovingKindnessCompassion, by = "SubID")
+
+# IOS
+inclusionOtherSelf <- df_T3 %>% dplyr::select(SubID, contains("IOS2"))
+inclusionOtherSelf$IOS2_1b <- as.numeric(inclusionOtherSelf$IOS2_1b)
+inclusionOtherSelf$IOS2_2b <- as.numeric(inclusionOtherSelf$IOS2_2b)
+inclusionOtherSelf$IOS2_3b <- as.numeric(inclusionOtherSelf$IOS2_3b)
+inclusionOtherSelf$IOS2_4b <- as.numeric(inclusionOtherSelf$IOS2_4b)
+inclusionOtherSelf$IOS2_5 <- as.numeric(inclusionOtherSelf$IOS2_5)
+inclusionOtherSelf$inclusionOtherSelf_mean <- rowMeans(inclusionOtherSelf[,c("IOS2_1b", "IOS2_2b", "IOS2_3b", "IOS2_4b", "IOS2_5")])
+inclusionOtherSelf$inclusionOtherSelf_mean_nostranger <- rowMeans(inclusionOtherSelf[,c("IOS2_1b", "IOS2_2b", "IOS2_3b", "IOS2_4b")])
+colnames(inclusionOtherSelf) <- c("SubID", "IOS_immediateFamily_T3", "IOS_immediateFamilyNum_T3", "IOS_extendedFamily_T3", "IOS_extendedFamilyNum_T3", "IOS_friend_T3", "IOS_friendNum_T3", "IOS_acquaintance_T3", "IOS_acquaintanceNum_T3", "IOS_strangerNum_T3", "inclusionOtherSelf_mean_T3", "inclusionOtherSelf_mean_nostranger_T3")
+
+df_ml_T3 <- left_join(df_ml_T3, inclusionOtherSelf, by = "SubID")
+
+# Cantrill wellbeing Ladder
+wellbeing <- df_T3 %>% dplyr::select(SubID, contains("LADDER"))
+wellbeing$LADDER_PRESENT2 <- as.numeric(as.character(wellbeing$LADDER_PRESENT2))
+wellbeing$LADDER_FUTURE2  <- as.numeric(as.character(wellbeing$LADDER_FUTURE2))
+wellbeing$wellbeing_mean_T3 <- rowMeans(wellbeing[, c("LADDER_PRESENT2", "LADDER_FUTURE2")], na.rm = TRUE)
+colnames(wellbeing) <- c("SubID", "wellbeingPresent_T3", "wellbeingFuture_T3", "wellbeing_mean_T3")
+
+df_ml_T3 <- left_join(df_ml_T3, wellbeing, by = "SubID")
+
+```
+
+### 4.5. post meditation experience
+
+```{r, message = FALSE}
+
+meditations <- df_T3 %>% dplyr::select(SubID, contains("meditations"), contains("Q422"), contains("Q423"), contains("Q424"), contains("Q426"), contains("Q427"), contains("Q429"))
+#Over the past six months, have you listened to the meditations from the training (i.e., after the training was over, have you continued to listen to the meditations)?
+# How many hours total did you listen to the meditations from the training in the past six months (i.e., after the training was over)?
+#Over the past six months, have you practiced any forms of meditation besides the meditations from the meditation training (i.e., have you done any other type of meditation after the meditation training was over)?
+#Please describe your meditation practice over the past six months (i.e., after the meditation training was over). What kind of meditation practice have you been doing and for how long?
+#Over the past six months, have you had any major life change or major life event occur? 
+#Please describe your major life change or event.
+#Is there anything else that you would like to tell us about the past six months?
+
+colnames(meditations) <- c("SubID", "postMedExpClosed", "postMedExpHours", "postMedExpClosedOther", "postMedExpOpen", "majorLifeChange", "majorLifeChangeDescribe", "anythingPast6months" )
+
+df_ml_T3 <- left_join(df_ml_T3, meditations, by = "SubID")
+
+```
+
+### 4.6. exclusion variables and saving the file as csv
+
+```{r, message = FALSE}
+
+# control questions
+attention <- df_T3 %>% dplyr::select(SubID, contains("ATTN2_1"), # in SCS (strongly agree - 6)
+                                                contains("ATTN2_2"), # in IRI (does not describe me well - A)
+                                                contains("ATTN2_3"), # in UCLA (rarely - 2)
+                                                contains("Q421")) # # Do you have any questions or comments about the study? Feel free to share anything else you would like us to know.
+colnames(attention) <- c("SubID", "attentionCheck1_T3", "attentionCheck2_T3", "attentionCheck3_T3", "anythingElse")
+
+df_ml_T3 <- left_join(df_ml_T3, attention, by = "SubID")
+
+# save
+write.csv(df_ml_T3, file.path(path, "clean/cleandata_T3.csv"))
+
+```
+
+# 5. MVPA Results
+
+We load the extracted ROI stats from the 3dMVM analysis in AFNI
+```{r, message = FALSE}
+
+# Read in CSV file. Adjust file path/filename if needed
+df_3dmvm <- read.csv(file.path(path, "raw/3dMVM_subjectValues.csv"), header = TRUE, stringsAsFactors = FALSE)
+
+# Rename SubjectID → SubID
+names(df_3dmvm)[names(df_3dmvm) == "SubjectID"] <- "SubID"
+
+# Remove the "sub-" prefix and leading zeros
+df_3dmvm$SubID <- gsub("^sub-", "", df_3dmvm$SubID)
+df_3dmvm$SubID <- sub("^0+", "", df_3dmvm$SubID)
+
+# Replace dots
+colnames(df_3dmvm) <- gsub("\\.", "_", colnames(df_3dmvm))
+colnames(df_3dmvm) <- gsub("X3dMVM_Group", "", colnames(df_3dmvm))
+colnames(df_3dmvm) <- gsub("X3dMVM_Groupmc_", "", colnames(df_3dmvm))
+colnames(df_3dmvm) <- gsub("p0_001_", "", colnames(df_3dmvm))
+colnames(df_3dmvm) <- gsub("_t", "", colnames(df_3dmvm))
+
+# Convert to numeric (optional but often helpful)
+df_3dmvm$SubID <- as.numeric(df_3dmvm$SubID)
+
+```
+
+# 6. Merge all data frames
+
+dfB_T1T2: 148 variables and 117 observations because purely behavioral data without 6 months or scan day behavioral data 
+df_behavior: 155 variables and 108 observations bc group column is in there now 
+dfB_all: 202 variables and 108 participants because we added 6 months survey to the above data frame. Not everyone did 6 months survey (only 102 pps), so we have some NAs in this df. 
+df_scanSurvey1: 202 variables and 59 participants
+df_scanSurvey2: 211 variables and 59 participants
+df_scanSurvey3: 10 variables and 54 participants
+df_scanSurvey4: 47 variables and 54 participants (now the ones who were excluded are not in there anymore)
+df_scanSurvey5: 257 variables and 54 participants
+dfS_all: 303 variables and 54 participants
+
+108 not long and 216 long because we removed fmri people from behavioral sample but not from neuro sample based on attention checks
+
+### 6.1. Exclusions
+
+```{r, message = FALSE}
+
+# for behavioral analysis, retain only the participants that also did the 4 weeks
+dfB_T1T2 <- merge(df_ml_T1, df_ml_T2) # 149 variables and 117 participants 
+dfB_noT3 <- merge(dfB_T1T2,df_medGroup) # 150 variables and 110 participants 
+dfB_noT3 <- left_join(dfB_noT3, df_medTracking, by = "SubID") # 155 variables and 110 participants
+dfB_noT3 <- left_join(dfB_noT3, df_medicationInfo, by = "SubID") # 156 variables and 110 participants
+dfB_all <- left_join(dfB_noT3, df_ml_T3, by = "SubID") # 202 variables and 110 participants 
+
+# exclude people that fail attention checks at least twice
+calculate_majority_value = function(column) { 
+  majority_value = as.numeric(names(which.max(table(column)))) # calculate the majority value for each column
+  return(majority_value)
+}
+
+# List of SubIDs that should not be excluded (see participants section for details)
+SubIDs_to_keep <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 18, 31, 34, 39, 43, 50, 52, 53, 57, 58, 63, 64, 67, 71, 74, 75, 76, 81, 87, 88, 91, 102, 106, 109, 115, 119, 122, 130, 136, 138, 139, 149, 154, 156, 158, 159, 167, 169, 170, 179, 180, 187, 191, 192, 193, 194, 195, 196, 197)
+
+# Calculate majority values for each attention column
+attention_columns <- dfB_all %>% select(contains("attention"))
+majority_values <- sapply(attention_columns, calculate_majority_value)
+
+# Initialize a vector to store the mismatch counts
+mismatch_counts <- numeric(nrow(dfB_all))
+
+# Count mismatches for each SubID
+for (i in 1:nrow(dfB_all)) {
+  count <- 0
+  for (colname in names(majority_values)) {
+    SubID_value = as.numeric(dfB_all[i, colname])
+    majority_value = majority_values[colname]
+    if (!is.na(SubID_value) && SubID_value != majority_value) {
+      count <- count + 1
+    }
+  }
+  mismatch_counts[i] <- count
+}
+
+# Add the mismatch counts as a new column to the dataframe
+dfB_all$attention_diff_count <- mismatch_counts
+
+# Print the SubID where count is larger or equal than 2 and not in the list to keep
+SubIDs_to_exclude <- dfB_all %>%
+  filter(attention_diff_count >= 2, !SubID %in% SubIDs_to_keep) %>%
+  select(SubID)
+
+print(SubIDs_to_exclude)
+
+SubIDs_to_exclude_also_scan <- dfB_all %>%
+  filter(attention_diff_count >= 2,) %>%
+  select(SubID)
+
+print(SubIDs_to_exclude_also_scan)
+
+# Exclude these rows from the dfB_all dataframe, while keeping the specified SubIDs because we still need to make scan frame and there we don't exclude the pps from because of power 
+dfB_all <- dfB_all %>%
+  filter(attention_diff_count < 2 | SubID %in% SubIDs_to_keep)
+
+# Exclude the same rows from the dfB_noT3 dataframe
+dfB_noT3 <- dfB_noT3 %>%
+  filter(!(SubID %in% SubIDs_to_exclude$SubID))
+
+```
+
+### 6.2. save clean files
+
+```{r, message = FALSE}
+
+# for neuro analysis, include scanday survey, spreadsheet information, and pattern similarity & AUC scores
+dfS <- merge(dfB_noT3, df_ml_scanSurvey) # add scan day data (202 variables and 59 participants)
+dfS <- merge(dfS, df_scanInfo) # add scan spreadsheet (211 variables and 59 participants)
+dfS_noT3 <- left_join(df_3dmvm,dfS, by = "SubID")
+dfS_all <- left_join(dfS_noT3, df_ml_T3, by = "SubID") # 303 variables and 54 participants
+
+## exclude the scan participants from the behavioral sample that didn't pass the attention check in the scan sample as seen above (SubID 76 and 191)
+dfB_all <- dfB_all %>%
+  filter(attention_diff_count < 2)
+
+# Exclude the same rows from all final dfs
+dfB_noT3 <- dfB_noT3 %>%
+  filter(!(SubID %in% SubIDs_to_exclude_also_scan$SubID))
+
+# write to csv
+# behavior including scan data but not T3 because some people dropped out for T3 and we don't want to lose them in this df
+write.csv(dfS_noT3, file.path(path, "clean/cleandata_scanSample_noT3.csv"))
+
+# behavior including scan data 6 months for multilevel models to assess changes over time 
+write.csv(dfS_all, file.path(path, "clean/cleandata_scanSample_all.csv"))
+
+# behavior only
+write.csv(dfB_noT3, file.path(path, "clean/cleandata_fullSample_noT3.csv"))
+
+# behavior only 6 months
+write.csv(dfB_all, file.path(path, "clean/cleandata_fullSample_all.csv"))
+
+```
+
+### 6.3 long format for MLLM: full sample 
+
+```{r, message = FALSE}
+
+df <- dfB_noT3
+
+# Identify columns with T1, T2 in their names
+columns_t1 <- grep("T1", names(df), value = TRUE)
+columns_t2 <- grep("T2", names(df), value = TRUE)
+
+# Print the identified columns for debugging
+print(columns_t1)
+print(columns_t2)
+
+# Find all unique base column names by removing _T1, _T2, _T3
+base_columns <- unique(gsub("_T[12]", "", c(columns_t1, columns_t2)))
+
+# Print the base column names for debugging
+print(base_columns)
+
+# Initialize list to store dataframes
+df_list <- list()
+
+if (is.data.frame(df)) {
+  for (base_col in base_columns) {
+    col_t1 <- paste0(base_col, "_T1")
+    col_t2 <- paste0(base_col, "_T2")
+
+    # Print the column names for debugging
+    print(paste("Processing:", col_t1, col_t2))
+    
+    # Create temporary dataframes for each time point, if they exist
+    temp_t1 <- if (col_t1 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t1)) %>%
+        mutate(time = 1)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 1)
+    }
+    
+    temp_t2 <- if (col_t2 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t2)) %>%
+        mutate(time = 2)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 2)
+    }
+    
+    
+    # Combine the temporary dataframes
+    temp_df <- bind_rows(temp_t1, temp_t2)
+    
+    # Print the combined dataframe for debugging
+    #print(temp_df)
+    
+    # Append to the list
+    df_list[[base_col]] <- temp_df
+  }
+  
+  # Combine all long dataframes by SubID and time
+  df_long <- reduce(df_list, full_join, by = c("SubID", "time"))
+  
+  # Print the combined long dataframe for debugging
+  print(head(df_long, 10)) # Displaying the first 10 rows for a quick check
+  
+  # Joining with the original dataframe
+  df_behavior_long <- left_join(df_long, df, by = "SubID")
+  
+  # Print the final long-format dataframe for debugging
+  print(head(df_behavior_long, 10))
+  
+  # Save the long-format dataframe
+  write.csv(df_behavior_long, file.path(path, "clean/cleandata_fullSample_noT3_long.csv"))
+} else {
+  print("Error: df is not a data frame. Please check your dataframe definition.")
+}
+
+
+```
+
+### 6.4 long format for MLM: full sample 6 months
+
+```{r, message = FALSE}
+
+df <- dfB_all
+
+# Identify columns with T1, T2, and T3 in their names
+columns_t1 <- grep("T1", names(df), value = TRUE)
+columns_t2 <- grep("T2", names(df), value = TRUE)
+columns_t3 <- grep("T3", names(df), value = TRUE)
+
+# Print the identified columns for debugging
+print(columns_t1)
+print(columns_t2)
+print(columns_t3)
+
+# Find all unique base column names by removing _T1, _T2, _T3
+base_columns <- unique(gsub("_T[123]", "", c(columns_t1, columns_t2, columns_t3)))
+
+# Print the base column names for debugging
+print(base_columns)
+
+# Initialize list to store dataframes
+df_list <- list()
+
+if (is.data.frame(df)) {
+  for (base_col in base_columns) {
+    col_t1 <- paste0(base_col, "_T1")
+    col_t2 <- paste0(base_col, "_T2")
+    col_t3 <- paste0(base_col, "_T3")
+    
+    # Print the column names for debugging
+    print(paste("Processing:", col_t1, col_t2, col_t3))
+    
+    # Create temporary dataframes for each time point, if they exist
+    temp_t1 <- if (col_t1 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t1)) %>%
+        mutate(time = 1)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 1)
+    }
+    
+    temp_t2 <- if (col_t2 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t2)) %>%
+        mutate(time = 2)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 2)
+    }
+    
+    temp_t3 <- if (col_t3 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t3)) %>%
+        mutate(time = 3)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 3)
+    }
+    
+    # Print the temporary dataframes for debugging
+    print(temp_t1)
+    print(temp_t2)
+    print(temp_t3)
+    
+    # Combine the temporary dataframes
+    temp_df <- bind_rows(temp_t1, temp_t2, temp_t3)
+    
+    # Print the combined dataframe for debugging
+   # print(temp_df)
+    
+    # Append to the list
+    df_list[[base_col]] <- temp_df
+  }
+  
+  # Combine all long dataframes by SubID and time
+  df_long <- reduce(df_list, full_join, by = c("SubID", "time"))
+  
+  # Print the combined long dataframe for debugging
+  print(head(df_long, 10)) # Displaying the first 10 rows for a quick check
+  
+  # Joining with the original dataframe
+  dfB_all_long <- left_join(df_long, df, by = "SubID")
+  
+  # Print the final long-format dataframe for debugging
+  print(head(dfB_all_long, 10))
+  
+  # Save the long-format dataframe
+  write.csv(dfB_all_long,  file.path(path, "clean/cleandata_fullSample_all_long.csv"))
+} else {
+  print("Error: df is not a data frame. Please check your dataframe definition.")
+}
+
+```
+
+### 6.5 long format for MLM: scan sample without T3
+
+```{r, message = FALSE}
+
+# Define the dataframe
+df <- dfS_noT3
+
+# Identify columns with T1, T2, and T3 in their names
+columns_t1 <- grep("T1", names(df), value = TRUE)
+columns_t2 <- grep("T2", names(df), value = TRUE)
+
+# Print the identified columns for debugging
+print(columns_t1)
+print(columns_t2)
+
+# Find all unique base column names by removing _T1, _T2, _T3
+base_columns <- unique(gsub("_T[12]", "", c(columns_t1, columns_t2)))
+
+# Print the base column names for debugging
+print(base_columns)
+
+# Initialize list to store dataframes
+df_list <- list()
+
+if (is.data.frame(df)) {
+  for (base_col in base_columns) {
+    col_t1 <- paste0(base_col, "_T1")
+    col_t2 <- paste0(base_col, "_T2")
+
+    # Print the column names for debugging
+    print(paste("Processing:", col_t1, col_t2))
+    
+    # Create temporary dataframes for each time point, if they exist
+    temp_t1 <- if (col_t1 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t1)) %>%
+        mutate(time = 1)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 1)
+    }
+    
+    temp_t2 <- if (col_t2 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t2)) %>%
+        mutate(time = 2)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 2)
+    }
+    
+    
+    # Combine the temporary dataframes
+    temp_df <- bind_rows(temp_t1, temp_t2)
+    
+    # Print the combined dataframe for debugging
+    #print(temp_df)
+    
+    # Append to the list
+    df_list[[base_col]] <- temp_df
+  }
+  
+  # Combine all long dataframes by SubID and time
+  df_long <- reduce(df_list, full_join, by = c("SubID", "time"))
+  
+  # Print the combined long dataframe for debugging
+  print(head(df_long, 10)) # Displaying the first 10 rows for a quick check
+  
+  # Joining with the original dataframe
+  dfS_noT3_long <- left_join(df_long, df, by = "SubID")
+  
+  # Print the final long-format dataframe for debugging
+  print(head(dfS_noT3_long, 10))
+  
+  # Save the long-format dataframe
+  write.csv(dfS_noT3_long, file.path(path, "clean/cleandata_scanSample_noT3_long.csv"))
+} else {
+  print("Error: df is not a data frame. Please check your dataframe definition.")
+}
+
+
+
+```
+
+### 6.6 long format for MLM: scan sample 6 months included
+
+```{r, message = FALSE}
+
+df <- dfS_all
+
+# Identify columns with T1, T2, and T3 in their names
+columns_t1 <- grep("T1", names(df), value = TRUE)
+columns_t2 <- grep("T2", names(df), value = TRUE)
+columns_t3 <- grep("T3", names(df), value = TRUE)
+
+# Print the identified columns for debugging
+print(columns_t1)
+print(columns_t2)
+print(columns_t3)
+
+# Find all unique base column names by removing _T1, _T2, _T3
+base_columns <- unique(gsub("_T[123]", "", c(columns_t1, columns_t2, columns_t3)))
+
+# Print the base column names for debugging
+print(base_columns)
+
+# Initialize list to store dataframes
+df_list <- list()
+
+if (is.data.frame(df)) {
+  for (base_col in base_columns) {
+    col_t1 <- paste0(base_col, "_T1")
+    col_t2 <- paste0(base_col, "_T2")
+    col_t3 <- paste0(base_col, "_T3")
+    
+    # Print the column names for debugging
+    print(paste("Processing:", col_t1, col_t2, col_t3))
+    
+    # Create temporary dataframes for each time point, if they exist
+    temp_t1 <- if (col_t1 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t1)) %>%
+        mutate(time = 1)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 1)
+    }
+    
+    temp_t2 <- if (col_t2 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t2)) %>%
+        mutate(time = 2)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 2)
+    }
+    
+    temp_t3 <- if (col_t3 %in% names(df)) {
+      df %>%
+        select(SubID, !!base_col := !!sym(col_t3)) %>%
+        mutate(time = 3)
+    } else {
+      df %>%
+        select(SubID) %>%
+        mutate(!!base_col := NA, time = 3)
+    }
+    
+    # Print the temporary dataframes for debugging
+    print(temp_t1)
+    print(temp_t2)
+    print(temp_t3)
+    
+    # Combine the temporary dataframes
+    temp_df <- bind_rows(temp_t1, temp_t2, temp_t3)
+    
+    # Print the combined dataframe for debugging
+    #print(temp_df)
+    
+    # Append to the list
+    df_list[[base_col]] <- temp_df
+  }
+  
+  # Combine all long dataframes by SubID and time
+  df_long <- reduce(df_list, full_join, by = c("SubID", "time"))
+  
+  # Print the combined long dataframe for debugging
+  print(head(df_long, 10)) # Displaying the first 10 rows for a quick check
+  
+  # Joining with the original dataframe
+  dfS_all_long <- left_join(df_long, df, by = "SubID")
+  
+  # Print the final long-format dataframe for debugging
+  print(head(dfS_all_long, 10))
+  
+  # Save the long-format dataframe
+  write.csv(dfS_all_long,file.path(path, "clean/cleandata_scanSample_all_long.csv"))
+} else {
+  print("Error: df is not a data frame. Please check your dataframe definition.")
+}
+
+
+
+```
+
+# 7. Check pp number
+
+```{r, message = FALSE}
+
+table(dfB_noT3$GroupID)
+table(dfS_noT3$GroupID)
+```
