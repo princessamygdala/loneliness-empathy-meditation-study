@@ -36,7 +36,7 @@ library(lmtest) #lrtest
 
 # for T2 analysis, we use a wide df. 
 
-path <- "/Users/md1864/Documents/GitHub/mind-and-life/Behavioral_Data_R_Scripts/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
+path <- "/my/path/analysis_clean/Behavioral_Data_R_Scripts/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
 
 dfB_noT3 <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3.csv"), row.names = 1)
 dfB_noT3_long <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3_long.csv"), row.names = 1)
@@ -75,6 +75,8 @@ dfS_noT3_all_long$GroupID <- relevel(dfS_noT3_all_long$GroupID, ref = "PMR")
 ### 2.1. Differences in age between samples
 
 ```{r, message = FALSE}
+
+library(rstatix)
 # Create the data frame
 df_age <- as.data.frame(cbind(dfB_noT3$age, dfS_noT3$age))
 colnames(df_age) <- c("dB1", "dB2")
@@ -373,46 +375,43 @@ Primary Analysis
 ### 3.1. Differences at baseline full sample 
 
 ```{r, message = FALSE}
-# Function to perform t-test, calculate effect size, and print results
-perform_t_test <- function(variable_name, data) {
+
+library(effectsize)
+
+perform_full_analysis <- function(variable_name, data) {
+  
   lkm_data <- data[data$GroupID == "LKM", variable_name]
   pmr_data <- data[data$GroupID == "PMR", variable_name]
   
+  ## welch's two-sample two-sided t-test
   t_test <- t.test(lkm_data, pmr_data)
   test_statistic <- t_test$statistic
   p_value <- t_test$p.value
-  mean_lkm <- mean(lkm_data, na.rm = TRUE)
-  sd_lkm <- sd(lkm_data, na.rm = TRUE)
-  mean_pmr <- mean(pmr_data, na.rm = TRUE)
-  sd_pmr <- sd(pmr_data, na.rm = TRUE)
-  overall_mean <- mean(c(lkm_data, pmr_data), na.rm = TRUE) # Calculate overall mean
-  ci <- t_test$conf.int
+  ci_t <- t_test$conf.int
   
-  # Calculate Cohen's d for effect size
-  n_lkm <- length(lkm_data)
-  n_pmr <- length(pmr_data)
-  pooled_sd <- sqrt(((n_lkm - 1) * var(lkm_data, na.rm = TRUE) + (n_pmr - 1) * var(pmr_data, na.rm = TRUE)) / (n_lkm + n_pmr - 2))
-  cohen_d <- (mean_lkm - mean_pmr) / pooled_sd
+  ## Cohen's d 
+  cohend <- cohens_d(lkm_data, pmr_data, ci = 0.95)
   
-  cat("\nTesting Variable:", variable_name, "\n")
-  cat("Mean in LKM:", mean_lkm, "\n")
-  cat("SD in LKM:", sd_lkm, "\n")
-  cat("Mean in PMR:", mean_pmr, "\n")
-  cat("SD in PMR:", sd_pmr, "\n")
-  cat("Overall Mean:", overall_mean, "\n") # Print overall mean
-  cat("Test Statistic:", test_statistic, "\n")
-  cat("P-value:", p_value, "\n")
-  cat("95% CI for the difference in means:", ci, "\n")
-  cat("Effect Size (Cohen's d):", cohen_d, "\n")
+  cat("\n\n==== Variable:", variable_name, "====\n")
+  
+  cat("t-test:\n")
+  cat("t =", test_statistic, "| p =", p_value, "\n")
+  cat("95% CI of mean difference:", ci_t, "\n")
+  
+  cat("\nCohen's d with 95% CI:\n")
+  print(cohend)
+
 }
 
-# Variables to test
-variables <- c("socialConnectedness_mean_T1","loneliness_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_PT_mean_T1", "traitEmpathyIRI_fant_mean_T1", "traitEmpathyIRI_PD_mean_T1", "inclusionOtherSelf_mean_T1", "wellbeing_mean_T1")
 
-# Perform t-tests for each variable
+## Variables
+variables <- c("loneliness_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_PT_mean_T1")
+
+## Run all variables
 for (variable in variables) {
-  perform_t_test(variable, dfB_noT3)
+  perform_full_analysis(variable, dfB_noT3)
 }
+
 
 ```
 
@@ -489,8 +488,9 @@ rownames(desc_stats_with_corr) <- NULL
 # Print the final table
 print(desc_stats_with_corr)
 
-# Optional: Save the final table as a CSV
-write.csv(desc_stats_with_corr, "spearman_correlation_table_Full Sample_all_with_pvalues_T1.csv", row.names = FALSE)
+# save 
+write.csv(desc_stats_with_corr, file.path(path, "clean/output/spearman_correlation_table_FullSample_all_with_pvalues_T1.csv"), row.names = FALSE)
+
 
 # Output the table in a formatted view
 kable(desc_stats_with_corr, format = "pandoc", caption = "Descriptive Statistics, Spearman Correlations, and P-values")
@@ -543,7 +543,7 @@ contrasts(dfB_all_long$time)
 ```{r, message = FALSE}
 
 # Run the model with the custom contrasts
-fitH1c_1_contrast <- lme(loneliness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+fitH1 <- lme(loneliness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
                          random = ~1 + time | SubID, 
                          data = dfB_all_long, 
                          method = "ML", 
@@ -562,17 +562,161 @@ tab_model(lme(loneliness_mean ~ 1 + time*GroupID + age + Male + Other + YesColle
           show.std = T)
 
 # save model 
-tab_model(fitH1c_1_contrast, file = "fit1H1c_T3.html", 
+tab_model(fitH1, 
+          file = file.path(path, "clean/output/", "fit1H1.html"), 
+          show.df = TRUE, 
+          show.aic = TRUE, 
+          show.se = TRUE, 
+          show.stat = TRUE, 
+          show.std = TRUE)
+
+# Run the model with the custom contrasts
+fitH2 <- lme(socialConnectedness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude)
+
+
+tab_model(lme(socialConnectedness_mean ~ 1 + time*GroupID + age + Male + Other + YesCollegeDegree, 
+                         random = ~ 1 + time | SubID, 
+                         data = dfB_all_long, 
+                         method = "ML", 
+                         na.action = na.exclude), 
           show.df = T, 
           show.aic = T, 
           show.se = T, 
           show.stat = T, 
           show.std = T)
 
+# save model 
+tab_model(fitH2, 
+          file = file.path(path, "clean/output/", "fit1H2.html"), 
+          show.df = TRUE, 
+          show.aic = TRUE, 
+          show.se = TRUE, 
+          show.stat = TRUE, 
+          show.std = TRUE)
+
+```
+
+### 4.2.2. BF: Loneliness and Social Connectedness
+
+
+```{r, message = FALSE}
+
+# Rouder, J. N., Speckman, P. L., Sun, D., Morey, R. D., & Iverson, G. (2009). Bayesian t tests for accepting and rejecting the null hypothesis. Psychonomic Bulletin & Review, 16(2), 225–237. https://doi.org/10.3758/PBR.16.2.225
+
+
+# LONELINESS
+# Data
+t_values <- c(-1.01, 1.86, 1.16, 0.62)
+dfs <- c(201, 102, 201, 201)
+labels <- c("time2", "Group", "time1:Group", "time2:Group")
+
+# Compute BF10 correctly (log BF → exponentiated)
+BFs <- mapply(function(t, df) {
+  res <- BayesFactor::ttest.tstat(t = t, n1 = df + 1, rscale = "medium")
+  bf <- exp(res$bf)  # fix: exponentiate the log(BF10)
+  return(bf)
+}, t_values, dfs)
+
+# Interpretation labels
+BF_labels <- sapply(BFs, function(bf) {
+  if (bf < 1/10) return("Strong evidence for H0")
+  else if (bf < 1/3) return("Moderate evidence for H0")
+  else if (bf < 1) return("Anecdotal evidence for H0")
+  else if (bf < 3) return("Anecdotal evidence for H1")
+  else if (bf < 10) return("Moderate evidence for H1")
+  else return("Strong evidence for H1")
+})
+
+# Results table
+results <- data.frame(
+  Effect = labels,
+  t_value = t_values,
+  df = dfs,
+  BF10 = round(BFs, 3),
+  BF01 = round(1 / BFs, 3),
+  Interpretation = BF_labels
+)
+
+print(results)
+
+
+# SOCIAL CONNECTEDNESS 
+
+library(BayesFactor)
+
+# Data
+t_values <- c(1.85, 1.18, -1.75, -1.12, -1.40)
+dfs <- c(201, 201, 102, 201, 201)
+labels <- c("time1","time2", "Group", "time1:Group", "time2:Group")
+
+# Compute BF10 correctly (log BF → exponentiated)
+BFs <- mapply(function(t, df) {
+  res <- BayesFactor::ttest.tstat(t = t, n1 = df + 1, rscale = "medium")
+  bf <- exp(res$bf)  # fix: exponentiate the log(BF10)
+  return(bf)
+}, t_values, dfs)
+
+# Interpretation labels
+BF_labels <- sapply(BFs, function(bf) {
+  if (bf < 1/10) return("Strong evidence for H0")
+  else if (bf < 1/3) return("Moderate evidence for H0")
+  else if (bf < 1) return("Anecdotal evidence for H0")
+  else if (bf < 3) return("Anecdotal evidence for H1")
+  else if (bf < 10) return("Moderate evidence for H1")
+  else return("Strong evidence for H1")
+})
+
+# Results table
+results <- data.frame(
+  Effect = labels,
+  t_value = t_values,
+  df = dfs,
+  BF10 = round(BFs, 3),
+  BF01 = round(1 / BFs, 3),
+  Interpretation = BF_labels
+)
+
+print(results)
+
+
+# yields similar results: 
+# Wagenmakers, E.-J. (2007). A practical solution to the pervasive problems of p values. Psychonomic Bulletin & Review, 14(5), 779–804. https://doi.org/10.3758/BF03194105
+
+# # Function to calculate BF10 from t and df according to EJs paper
+# BF10_from_t <- function(t, df) {
+#   n <- df + 1
+#   BF01 <- sqrt(n) * exp(- (t^2) / 2)
+#   BF10 <- 1 / BF01
+#   return(BF10)
+# }
+# 
+# # Your t-values & dfs
+# t_values <- c(-1.01, 1.86, 1.16, 0.62)
+# dfs <- c(201, 102, 201, 201)
+# 
+# # Labels
+# effects <- c("time2", "Group", "time1:Group", "time2:Group")
+# 
+# # Calculate BFs
+# BFs <- BF10_from_t(t_values, dfs)
+# 
+# # Show nicely
+# data.frame(
+#   Effect = effects,
+#   t_value = t_values,
+#   df = dfs,
+#   BF10 = round(BFs, 3)
+# )
+
+
 ```
 
 
-### 4.2.2. Plot loneliness
+### 4.2.5. Plot loneliness
 
 ```{r, message = FALSE}
 library(ggplot2)
@@ -690,56 +834,63 @@ tab_model(fitH1g_1_contrast, file = "fit1H1g_T3.html",
           show.stat = T, 
           show.std = T)
 
-library(brms)
-library(bayestestR) 
 
-# Factor recoding: mean-center GroupID to -0.5 and 0.5
-dfB_all_long$GroupID <- factor(
-  dfB_all_long$GroupID,
-  levels = c("PMR", "LKM"),  # Original levels
-  labels = c(-0.5, 0.5)      # New levels
-)
+```
 
-# Make time a factor with custom contrasts
-dfB_all_long$time <- factor(dfB_all_long$time, levels = c(1, 2, 3))
-contrasts(dfB_all_long$time) <- t(rbind(
-  c(-1, 1, 0),  # T1 vs T2
-  c(0, -1, 1)   # T2 vs T3
-))
+### 4.3.2. BF: IRI and subscales over time
 
-# Check
-str(dfB_all_long)
-contrasts(dfB_all_long$time)
+```{r, message = FALSE}
 
+library(BayesFactor)
 
-# Example priors:
-# - Normal(0,1) on all fixed effects (b) and the intercept
-# - Exponential(1) as a weakly informative prior on all standard deviations (sd, sigma)
-# These are just examples; adjust to suit your domain knowledge.
+# === 1. t-values and dfs for IRI EC model ===
+t_values_EC <- c(-0.12, -1.00, -0.29, 1.10, 1.18)
+dfs_EC <- c(201, 201, 102, 201, 201)
+effects_EC <- c("time1", "time2", "Group",
+                "time1:Group", "time2:Group")
 
-priors_ec <- c(
-  prior(normal(0, 1), class = "Intercept"),
-  prior(normal(0, 1), class = "b"),
-  prior(exponential(1), class = "sd"),
-  prior(exponential(1), class = "sigma")
-)
+# === 2. t-values and dfs for IRI PT model ===
+t_values_PT <- c(1.04, 0.13, -0.02, 0.64, 0.68)
+dfs_PT <- c(201, 201, 102, 201, 201)
+effects_PT <- c("time1", "time2", "Group", 
+                "time1:Group", "time2:Group")
 
-# Fit the Bayesian model
-fitH1e_bayes <- brm(
-  traitEmpathyIRI_EC_mean ~ 1 + time * GroupID + age + Male + Other + YesCollegeDegree +
-    (1 + time | SubID),      # Random effects structure
-  data       = dfB_all_long,
-  family     = gaussian(),
-  prior      = priors_ec,
-  iter       = 4000,         # Increase iterations for more stable estimation
-  warmup     = 2000,         
-  chains     = 4,            # More chains = better exploration of posterior
-  cores      = 4,            # Use multiple cores if available
-  control    = list(adapt_delta = 0.95) # Helps for more complex models
-)
+# === 3. Function to calculate BF10 from t and df ===
+compute_BF_table <- function(t_vals, dfs, labels) {
+  BFs <- mapply(function(t, df) {
+    res <- BayesFactor::ttest.tstat(t = t, n1 = df + 1, rscale = "medium")
+    exp(res$bf)  # exponentiate the log(BF10)
+  }, t_vals, dfs)
+  
+  BF_labels <- sapply(BFs, function(bf) {
+    if (bf < 1/10) return("Strong evidence for H0")
+    else if (bf < 1/3) return("Moderate evidence for H0")
+    else if (bf < 1) return("Anecdotal evidence for H0")
+    else if (bf < 3) return("Anecdotal evidence for H1")
+    else if (bf < 10) return("Moderate evidence for H1")
+    else return("Strong evidence for H1")
+  })
+  
+  data.frame(
+    Effect = labels,
+    t_value = t_vals,
+    df = dfs,
+    BF10 = round(BFs, 3),
+    BF01 = round(1 / BFs, 3),
+    Interpretation = BF_labels
+  )
+}
 
-# Check results
-summary(fitH1e_bayes)
+# === 4. Compute tables ===
+results_EC <- compute_BF_table(t_values_EC, dfs_EC, effects_EC)
+results_PT <- compute_BF_table(t_values_PT, dfs_PT, effects_PT)
+
+# === 5. Print results ===
+cat("===== IRI EC Model =====\n")
+print(results_EC)
+
+cat("\n===== IRI PT Model =====\n")
+print(results_PT)
 
 ```
 
@@ -803,6 +954,62 @@ tab_model(fit_ios_stranger, file = "fit_ios_stranger.html",
           show.se = T, 
           show.stat = T, 
           show.std = T)
+
+
+```
+
+### 4.4.2. BF: IOS mean and stranger over time 
+
+```{r, message = FALSE}
+
+library(BayesFactor)
+
+# === 1. t-values and dfs for IOS mean ===
+t_values_ios_mean <- c(0.66, -0.59, 0.47, 1.44)
+dfs_ios_mean <- c(201, 102, 201, 201)
+effects_ios_mean <- c("time2", "Group", "time1:Group", "time2:Group")
+
+# === 2. t-values and dfs for IOS stranger (no demographics) ===
+t_values_ios_stranger <- c(0.67, 0.09, -0.95, -0.39)
+dfs_ios_stranger <- c(201, 102, 201, 201)
+effects_ios_stranger <- c("time2", "Group", "time1:Group", "time2:Group")
+
+# === 3. Function to compute BF10 with interpretation ===
+compute_BF_table <- function(t_vals, dfs, labels) {
+  BFs <- mapply(function(t, df) {
+    res <- BayesFactor::ttest.tstat(t = t, n1 = df + 1, rscale = "medium")
+    exp(res$bf)
+  }, t_vals, dfs)
+  
+  BF_labels <- sapply(BFs, function(bf) {
+    if (bf < 1/10) return("Strong evidence for H0")
+    else if (bf < 1/3) return("Moderate evidence for H0")
+    else if (bf < 1) return("Anecdotal evidence for H0")
+    else if (bf < 3) return("Anecdotal evidence for H1")
+    else if (bf < 10) return("Moderate evidence for H1")
+    else return("Strong evidence for H1")
+  })
+  
+  data.frame(
+    Effect = labels,
+    t_value = t_vals,
+    df = dfs,
+    BF10 = round(BFs, 3),
+    BF01 = round(1 / BFs, 3),
+    Interpretation = BF_labels
+  )
+}
+
+# === 4. Compute tables ===
+results_ios_mean <- compute_BF_table(t_values_ios_mean, dfs_ios_mean, effects_ios_mean)
+results_ios_stranger <- compute_BF_table(t_values_ios_stranger, dfs_ios_stranger, effects_ios_stranger)
+
+# === 5. Print results ===
+cat("===== Inclusion Other Self Mean (IOS mean) — No Demographics =====\n")
+print(results_ios_mean)
+
+cat("\n===== IOS Stranger Num — No Demographics =====\n")
+print(results_ios_stranger)
 
 
 ```
@@ -945,7 +1152,8 @@ for (var in variables) {
 
 # Save the results table as a CSV file (APA appropriate)
 results_apa <- results %>% mutate_if(is.numeric, ~ round(., 2))
-write.csv(results_apa, "APA_t_test_results.csv", row.names = FALSE)
+write.csv(results_apa, file.path(path, "clean/output/APA_2sample_t_test_subjectiveRatings_results.csv"), row.names = FALSE)
+
 print(results_apa)
 
 # For plotting, standardize (z-score) all the variables
@@ -1064,7 +1272,7 @@ for (var in variables) {
 
 # Round numeric columns for APA-style presentation and save results as CSV
 results_apa <- results %>% mutate_if(is.numeric, ~ round(., 2))
-write.csv(results_apa, "APA_t_test_results.csv", row.names = FALSE)
+write.csv(results_apa, file.path(path, "clean/output/APA_2sample_t_test_studyPartner_results.csv"), row.names = FALSE)
 print(results_apa)
 
 # For plotting, standardize (z-score) all the variables for better comparability.
@@ -1123,6 +1331,7 @@ tab_model(lm(traitEmpathyIRI_EC_mean_T2 ~ age + Male + Other + YesCollegeDegree 
           show.stat = T, 
           show.std = T)
 
+
 tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
           show.df = T, 
           show.aic = T, 
@@ -1153,27 +1362,15 @@ tab_model(lm(traitEmpathyIRI_EC_mean_T2 ~ age + Male + Other + YesCollegeDegree 
           show.stat = T, 
           show.std = T)
 
-tab_model(lm(traitEmpathyIRI_PD_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
-
-tab_model(lm(traitEmpathyIRI_fant_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
-
-
 tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
           show.df = T, 
           show.aic = T, 
           show.se = T, 
           show.stat = T, 
           show.std = T)
+
+
+
 
 ```
 
@@ -1182,12 +1379,6 @@ tab_model(lm(traitEmpathyIRI_PT_mean_T2 ~ age + Male + Other + YesCollegeDegree 
 ```{r, message = FALSE}
 
 # fear
-tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
 
 tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
           show.df = T, 
@@ -1196,13 +1387,14 @@ tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupI
           show.stat = T, 
           show.std = T)
 
-# pain rating 
-tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
           show.df = T, 
           show.aic = T, 
           show.se = T, 
           show.stat = T, 
           show.std = T)
+
+# pain rating 
 
 tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
           show.df = T, 
@@ -1211,15 +1403,23 @@ tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupI
           show.stat = T, 
           show.std = T)
 
-# unpleasantness 
-tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
           show.df = T, 
           show.aic = T, 
           show.se = T, 
           show.stat = T, 
           show.std = T)
 
+# unpleasantness 
+
 tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
           show.df = T, 
           show.aic = T, 
           show.se = T, 
@@ -1304,38 +1504,81 @@ tab_model(lm(IOS_studyPartner ~ age + Male + Other + YesCollegeDegree + GroupID 
 
 ```
 
-### 6.4. Wellbeing 
+### 6.4. BF 
 
 ```{r, message = FALSE}
-# fear
-tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_fear, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
+library(BayesFactor)
+library(dplyr)
 
-# pain rating 
-tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painRating, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
+# Compute BF from t-value
+compute_BF_from_t <- function(t, n) {
+  bf10 <- BayesFactor::ttest.tstat(t = t, n1 = n, simple = TRUE)
+  return(as.numeric(bf10))
+}
 
-# unpleasantness of pain 
-tab_model(lm(wellbeing_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + stateEmp_painUnpleasant, data = dfS_noT3), 
-          show.df = T, 
-          show.aic = T, 
-          show.se = T, 
-          show.stat = T, 
-          show.std = T)
+# Interpret BF
+interpret_BF <- function(bf10) {
+  if (bf10 < 1/10) return("Strong evidence for H₀")
+  if (bf10 < 1/3)  return("Moderate evidence for H₀")
+  if (bf10 < 1)    return("Anecdotal evidence for H₀")
+  if (bf10 < 3)    return("Anecdotal evidence for H₁")
+  if (bf10 < 10)   return("Moderate evidence for H₁")
+  return("Strong evidence for H₁")
+}
 
+# Outcomes and predictors
+outcomes <- c("traitEmpathyIRI_EC_mean_T2", "traitEmpathyIRI_PT_mean_T2",
+              "socialConnectedness_mean_T2", "loneliness_mean_T2",
+              "inclusionOtherSelf_mean_T2", "IOS_strangerNum_T2", "IOS_studyPartner")
+predictors <- c("stateEmp_fear", "stateEmp_painRating", "stateEmp_painUnpleasant")
+
+# Results holder
+results_df <- data.frame()
+
+# Loop over models
+for (outcome in outcomes) {
+  for (predictor in predictors) {
+    
+    # Fit model
+    formula <- as.formula(paste0(outcome, " ~ age + Male + Other + YesCollegeDegree + GroupID + ", predictor))
+    model <- lm(formula, data = dfS_noT3)
+    model_summary <- summary(model)
+    n <- nobs(model)
+    
+    # Get all coefficients
+    coefs <- rownames(model_summary$coefficients)
+
+    # Terms to evaluate
+    terms_to_check <- c(predictor)
+    
+    # Loop over both terms
+    for (term in terms_to_check) {
+      if (term %in% coefs) {
+        t_val <- model_summary$coefficients[term, "t value"]
+        bf10 <- compute_BF_from_t(t_val, n)
+        bf01 <- 1 / bf10
+        evidence <- interpret_BF(bf10)
+        
+        results_df <- rbind(results_df, data.frame(
+          Outcome = outcome,
+          Predictor = term,
+          t_value = round(t_val, 2),
+          N = n,
+          BF10 = round(bf10, 3),
+          BF01 = round(bf01, 3),
+          Evidence = evidence
+        ))
+      }
+    }
+  }
+}
+
+# Output
+print(results_df)
 
 ```
 
-
-## 7. 3dMVM
+## 7. Neuro
 
 ### 7.1. Prep data for AFNI analysis
 
@@ -1367,7 +1610,7 @@ mc_df = dfS_noT3 %>%
 ```
 
 
-### 7.2. AI and dACC
+### 7.2. AI and dACC Plots based on 3dMVM
 
 ```{r, message = FALSE}
 library(ggplot2)
@@ -1454,12 +1697,12 @@ for (dv in names(dv_iv_mapping)) {
     # Print the plot
     print(plot_interaction)
     
-    # Save the plot as a file
-    ggsave(
-      filename = paste0("/Users/md1864/Documents/GitHub/mind-and-life/Behavioral_Data_R_Scripts/data/plot_", dv, "_vs_", iv, ".png"),
-      plot = plot_interaction,
-      width = 8, height = 6
-    )
+    # # Save the plot as a file
+    # ggsave(
+    #   filename = paste0("/my/path/data/plot_", dv, "_vs_", iv, ".png"),
+    #   plot = plot_interaction,
+    #   width = 8, height = 6
+    # )
     
     print(paste("Plot saved for DV:", dv, "and IV:", iv))
   } else {
@@ -1470,3 +1713,85 @@ for (dv in names(dv_iv_mapping)) {
 
 ```
 
+## 8. Calculate BF for neuro results
+
+### 8.1. Calculate BF for 2sample t-tests
+
+BF01 = 3 means your data are 3x more likely under H0 than H1 — for that specific test. 
+
+```{r, message = FALSE}
+library(BayesFactor)
+library(dplyr)
+library(readr)
+
+# Load CSV
+df <- read.csv(file.path(path, "clean/LKMminusControl_mean_Tstats.csv"))
+
+# Degrees of freedom (from AFNI)
+df_val <- 52
+
+# Convert t-values to Bayes Factors
+results_df <- df %>%
+  mutate(
+    t_value = MeanTstat_LKMminusControl,
+    log_bf10 = sapply(t_value, function(t) ttest.tstat(t = t, n1 = df_val + 2, rscale = 0.707)$bf),
+    bf10 = exp(log_bf10),
+    bf01 = 1 / bf10,
+    evidence_label = case_when(
+      bf01 >= 10 | bf01 <= 1/10 ~ "strong evidence for H0",
+      bf01 >= 3  | bf01 <= 1/3  ~ "moderate evidence for H0",
+      TRUE                      ~ "anecdotal evidence for H0"
+    )
+  ) %>%
+  select(TestName, MaskUsed, t_value, bf01, bf10, evidence_label) %>%
+  mutate(across(c(t_value, bf01, bf10), ~ round(.x, 3)))
+
+# View final result
+print(results_df)
+
+# Optionally save to CSV
+# write.csv(results_df, file.path(path, "LKMminusControl_BayesFactors.csv"), row.names = FALSE)
+
+
+```
+
+### 8.1. Calculate BF for 3dMVM
+
+```{r, message = FALSE}
+
+library(BayesFactor)
+library(dplyr)
+library(tidyr)
+library(readr)
+
+# Load your data
+df <- read.csv(file.path(path, "clean/3dMVM_tstats_summary.csv"))
+
+# Degrees of freedom for all tests (from AFNI output)
+df_val <- 50
+
+# Convert t-values to BF for all three effects
+df_long <- df %>%
+  pivot_longer(cols = starts_with("T_"),
+               names_to = "Effect",
+               values_to = "t_value") %>%
+  mutate(
+    # Compute log BF10 from t-values
+    log_bf10 = sapply(t_value, function(t) ttest.tstat(t = t, n1 = df_val + 1, rscale = 0.707)$bf),
+    bf10 = exp(log_bf10),
+    bf01 = 1 / bf10,
+    evidence_label = case_when(
+      bf01 >= 10 | bf01 <= 1/10 ~ "strong evidence for H0",
+      bf01 >= 3  | bf01 <= 1/3  ~ "moderate evidence for H0",
+      TRUE                      ~ "anecdotal evidence for H0"
+    )
+  ) %>%
+  select(FileName, MaskUsed, Effect, t_value, bf01, bf10, evidence_label) %>%
+  mutate(across(c(t_value, bf01, bf10), ~ round(.x, 3)))
+
+# View result
+print(df_long)
+
+# Optionally save
+# write.csv(df_long, file.path(path, "MVM_BayesFactors_long.csv"), row.names = FALSE)
+```
