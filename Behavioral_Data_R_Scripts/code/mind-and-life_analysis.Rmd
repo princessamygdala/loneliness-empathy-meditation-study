@@ -36,7 +36,7 @@ library(lmtest) #lrtest
 
 # for T2 analysis, we use a wide df. 
 
-path <- "/my/path/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
+path <- "/Users/md1864/Documents/GitHub/mind-and-life/Behavioral_Data_R_Scripts/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
 
 dfB_noT3 <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3.csv"), row.names = 1)
 dfB_noT3_long <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3_long.csv"), row.names = 1)
@@ -690,6 +690,56 @@ tab_model(fitH1g_1_contrast, file = "fit1H1g_T3.html",
           show.stat = T, 
           show.std = T)
 
+library(brms)
+library(bayestestR) 
+
+# Factor recoding: mean-center GroupID to -0.5 and 0.5
+dfB_all_long$GroupID <- factor(
+  dfB_all_long$GroupID,
+  levels = c("PMR", "LKM"),  # Original levels
+  labels = c(-0.5, 0.5)      # New levels
+)
+
+# Make time a factor with custom contrasts
+dfB_all_long$time <- factor(dfB_all_long$time, levels = c(1, 2, 3))
+contrasts(dfB_all_long$time) <- t(rbind(
+  c(-1, 1, 0),  # T1 vs T2
+  c(0, -1, 1)   # T2 vs T3
+))
+
+# Check
+str(dfB_all_long)
+contrasts(dfB_all_long$time)
+
+
+# Example priors:
+# - Normal(0,1) on all fixed effects (b) and the intercept
+# - Exponential(1) as a weakly informative prior on all standard deviations (sd, sigma)
+# These are just examples; adjust to suit your domain knowledge.
+
+priors_ec <- c(
+  prior(normal(0, 1), class = "Intercept"),
+  prior(normal(0, 1), class = "b"),
+  prior(exponential(1), class = "sd"),
+  prior(exponential(1), class = "sigma")
+)
+
+# Fit the Bayesian model
+fitH1e_bayes <- brm(
+  traitEmpathyIRI_EC_mean ~ 1 + time * GroupID + age + Male + Other + YesCollegeDegree +
+    (1 + time | SubID),      # Random effects structure
+  data       = dfB_all_long,
+  family     = gaussian(),
+  prior      = priors_ec,
+  iter       = 4000,         # Increase iterations for more stable estimation
+  warmup     = 2000,         
+  chains     = 4,            # More chains = better exploration of posterior
+  cores      = 4,            # Use multiple cores if available
+  control    = list(adapt_delta = 0.95) # Helps for more complex models
+)
+
+# Check results
+summary(fitH1e_bayes)
 
 ```
 
@@ -1406,7 +1456,7 @@ for (dv in names(dv_iv_mapping)) {
     
     # Save the plot as a file
     ggsave(
-      filename = paste0("/my/path/data/plot_", dv, "_vs_", iv, ".png"),
+      filename = paste0("/Users/md1864/Documents/GitHub/mind-and-life/Behavioral_Data_R_Scripts/data/plot_", dv, "_vs_", iv, ".png"),
       plot = plot_interaction,
       width = 8, height = 6
     )
