@@ -1,0 +1,13 @@
+FileName,MaskUsed,T_Group,T_Predictor,T_Interaction
+3dMVM_GroupLoneliness_patternsim-anticipation_dACC.nii.gz,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.0652693,0.144748,-0.208327
+3dMVM_GroupLoneliness_patternsim-anticipation_leftAI.nii.gz,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,0.401688,0.651531,0.203421
+3dMVM_GroupLoneliness_patternsim-anticipation_rightAI.nii.gz,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,0.625462,-0.189711,-0.665269
+3dMVM_GroupLoneliness_patternsim-pain_dACC.nii.gz,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.101688,-0.143629,0.180287
+3dMVM_GroupLoneliness_patternsim-pain_leftAI.nii.gz,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,-0.566711,0.47692,0.844053
+3dMVM_GroupLoneliness_patternsim-pain_rightAI.nii.gz,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,-0.158093,-0.811991,0.222021
+3dMVM_GroupPT_patternsim-anticipation_dACC.nii.gz,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.0588813,-0.45015,0.187011
+3dMVM_GroupPT_patternsim-anticipation_leftAI.nii.gz,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,0.499442,-0.454079,0.552469
+3dMVM_GroupPT_patternsim-anticipation_rightAI.nii.gz,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,0.635017,0.315842,1.02927
+3dMVM_GroupPT_patternsim-pain_dACC.nii.gz,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.125251,0.584207,0.766055
+3dMVM_GroupPT_patternsim-pain_leftAI.nii.gz,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,-0.468401,0.191071,0.383142
+3dMVM_GroupPT_patternsim-pain_rightAI.nii.gz,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,-0.282351,0.672841,0.391571

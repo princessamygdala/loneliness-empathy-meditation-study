@@ -1,0 +1,17 @@
+TestName,MaskUsed,MeanTstat_LKMminusControl
+ML_2sample-ttest_decoding-anticipation-dACC,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,-0.120304
+ML_2sample-ttest_decoding-anticipation-leftAI,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,0.394796
+ML_2sample-ttest_decoding-anticipation-rightAI,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,0.310209
+ML_2sample-ttest_decoding-anticipation_wholebrain,MNI152NLin2009cAsym-desc-graymatter-thr25_3mm-mask_resampled.nii.gz,0.052247
+ML_2sample-ttest_decoding-pain-dACC,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,-0.291171
+ML_2sample-ttest_decoding-pain-leftAI,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,-0.607998
+ML_2sample-ttest_decoding-pain-rightAI,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,-0.363364
+ML_2sample-ttest_decoding-pain_wholebrain,MNI152NLin2009cAsym-desc-graymatter-thr25_3mm-mask_resampled.nii.gz,0.0789844
+ML_2sample-ttest_patternsim-anticipation_dACC,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.10183
+ML_2sample-ttest_patternsim-anticipation_leftAI,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,0.55005
+ML_2sample-ttest_patternsim-anticipation_rightAI,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,0.609107
+ML_2sample-ttest_patternsim-anticipation_wholebrain,MNI152NLin2009cAsym-desc-graymatter-thr25_3mm-mask_resampled.nii.gz,0.221695
+ML_2sample-ttest_patternsim-pain_dACC,aal2_desc-dACC-anteriorY0_3mm-mask_resampled.nii.gz,0.0702501
+ML_2sample-ttest_patternsim-pain_leftAI,aal2_desc-left-AI_3mm-mask_resampled.nii.gz,-0.488034
+ML_2sample-ttest_patternsim-pain_rightAI,aal2_desc-right-AI_3mm-mask_resampled.nii.gz,-0.342958
+ML_2sample-ttest_patternsim-pain_wholebrain,MNI152NLin2009cAsym-desc-graymatter-thr25_3mm-mask_resampled.nii.gz,0.0334502
