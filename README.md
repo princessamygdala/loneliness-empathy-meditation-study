@@ -4,7 +4,9 @@
 
 #### Folder Structure: 
 Behavioral R scripts: contains code and behavioral data for the behavioral part of the analysis
+
 Neuroimaging Python Bash scripts: contains code for the neuroimaging analysis; fMRI data is stored separately on https://openneuro.org/datasets/ds006243
+
 Materials: contains study materials
 
 #### Project Description: 
