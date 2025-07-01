@@ -1,0 +1,6 @@
+"Variable","Mean_LKM","Mean_PMR","SD_LKM","SD_PMR","t_value","df","p_value","CI_lower","CI_upper","Significance","Effect_Size"
+"inclusionOtherSelf_mean_T2",3.04,3.29,0.93,0.85,1.01,52,0.32,-0.24,0.74,"Not Significant",0.28
+"IOS_strangerNum_T2",1.72,1.64,0.88,0.76,-0.37,52,0.71,-0.54,0.37,"Not Significant",0.1
+"IOS_studyPartner",2.38,1.84,1.12,1.31,-1.63,52,0.11,-1.2,0.12,"Not Significant",0.45
+"studyPartnerLiking",5,4.96,1.07,1.27,-0.13,52,0.9,-0.68,0.6,"Not Significant",0.03
+"studyPartnerReal",5.72,5.4,1.85,1.55,-0.69,52,0.49,-1.27,0.62,"Not Significant",0.19
