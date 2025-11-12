@@ -36,7 +36,8 @@ library(lmtest) #lrtest
 
 # for T2 analysis, we use a wide df. 
 
-path <- "/my/path/analysis_clean/Behavioral_Data_R_Scripts/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
+
+path <- "/your/path/Behavioral_Data_R_Scripts/data" # CHANGE THIS PATH TO YOUR DIRECTORY!
 
 dfB_noT3 <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3.csv"), row.names = 1)
 dfB_noT3_long <- read.csv(file.path(path, "clean/cleandata_fullSample_noT3_long.csv"), row.names = 1)
@@ -79,6 +80,61 @@ dfS_noT3_all_long$GroupID <- relevel(dfS_noT3_all_long$GroupID, ref = "PMR")
 library(rstatix)
 # Create the data frame
 df_age <- as.data.frame(cbind(dfB_noT3$age, dfS_noT3$age))
+colnames(df_age) <- c("dB1", "dB2")
+
+# Calculate means and standard deviations
+mean_dB1 <- mean(df_age$dB1)
+mean_dB2 <- mean(df_age$dB2)
+sd_dB1 <- sd(df_age$dB1)
+sd_dB2 <- sd(df_age$dB2)
+
+# Calculate the standard errors
+se_dB1 <- sd_dB1 / sqrt(length(df_age$dB1))
+se_dB2 <- sd_dB2 / sqrt(length(df_age$dB2))
+
+# Calculate the 95% confidence intervals
+alpha <- 0.05
+t_critical <- qt(1 - alpha / 2, df = length(df_age$dB1) - 1)
+
+ci_dB1_lower <- mean_dB1 - t_critical * se_dB1
+ci_dB1_upper <- mean_dB1 + t_critical * se_dB1
+
+ci_dB2_lower <- mean_dB2 - t_critical * se_dB2
+ci_dB2_upper <- mean_dB2 + t_critical * se_dB2
+
+# Perform the t-test
+t_test <- t.test(df_age$dB1, df_age$dB2)
+
+# Calculate Cohen's d and its confidence interval using compute.es
+if (!require(compute.es)) {
+  install.packages("compute.es")
+  library(compute.es)
+}
+
+n1 <- length(df_age$dB1)
+n2 <- length(df_age$dB2)
+cohens_d <- (mean_dB1 - mean_dB2) / sqrt(((n1 - 1) * sd_dB1^2 + (n2 - 1) * sd_dB2^2) / (n1 + n2 - 2))
+
+es <- tes(t_test$statistic, n1, n2, dig = 3)
+
+# Print the results
+cat("Mean of dB1:", mean_dB1, "\n")
+cat("95% CI for mean of dB1:", ci_dB1_lower, "to", ci_dB1_upper, "\n")
+cat("Mean of dB2:", mean_dB2, "\n")
+cat("95% CI for mean of dB2:", ci_dB2_lower, "to", ci_dB2_upper, "\n")
+print(t_test)
+cat("Cohen's d:", cohens_d, "\n")
+cat("95% CI for Cohen's d:", es$l.d, "to", es$u.d, "\n")
+
+```
+
+### 2.1. Differences in age between samples
+
+```{r, message = FALSE}
+
+library(rstatix)
+# Create the data frame
+df_age <- as.data.frame(cbind(dfB_noT3$loneliness_mean_T1, dfS_noT3$loneliness_mean_T1))
 colnames(df_age) <- c("dB1", "dB2")
 
 # Calculate means and standard deviations
@@ -377,6 +433,7 @@ Primary Analysis
 ```{r, message = FALSE}
 
 library(effectsize)
+conflicted::conflicts_prefer(effectsize::cohens_d)
 
 perform_full_analysis <- function(variable_name, data) {
   
@@ -420,7 +477,7 @@ for (variable in variables) {
 ```{r, message = FALSE}
 
 # Define variables of interest
-selected_vars <- c("socialConnectedness_mean_T1", "loneliness_mean_T1", "inclusionOtherSelf_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_PT_mean_T1", "wellbeing_mean_T1", "age", "Female", "Male")
+selected_vars <- c("socialConnectedness_mean_T1", "loneliness_mean_T1", "inclusionOtherSelf_mean_T1", "traitEmpathyIRI_EC_mean_T1", "traitEmpathyIRI_fant_mean_T1", "traitEmpathyIRI_PD_mean_T1", "wellbeing_mean_T1", "age", "Female", "Male")
 
 # Subset your data frame
 subset_data <- dfB_noT3[selected_vars]
@@ -496,6 +553,88 @@ write.csv(desc_stats_with_corr, file.path(path, "clean/output/spearman_correlati
 kable(desc_stats_with_corr, format = "pandoc", caption = "Descriptive Statistics, Spearman Correlations, and P-values")
 
 ```
+### 3.2. Correlations at T2 full sample 
+
+```{r, message = FALSE}
+
+# Define variables of interest
+selected_vars <- c("socialConnectedness_mean_T2", "loneliness_mean_T2", "inclusionOtherSelf_mean_T2", "traitEmpathyIRI_EC_mean_T2", "traitEmpathyIRI_fant_mean_T2", "traitEmpathyIRI_PD_mean_T2", "traitEmpathyIRI_PT_mean_T2", "wellbeing_mean_T2", "age", "Female", "Male")
+
+# Subset your data frame
+subset_data <- dfB_noT3[selected_vars]
+
+# Custom function to calculate p-values for a correlation matrix (Spearman)
+cor.mtest <- function(mat, conf.level = 0.95) {
+  mat <- as.matrix(mat)
+  n <- ncol(mat)
+  p.mat <- matrix(NA, n, n)
+  diag(p.mat) <- 0
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      tmp <- cor.test(mat[, i], mat[, j], method = "spearman", exact = FALSE) # Use Spearman
+      p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+    }
+  }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+# Calculate Spearman correlation matrix
+cor_matrix <- cor(subset_data, method = "spearman", use = "pairwise.complete.obs")
+
+# Calculate p-values using Spearman correlations
+p_matrix <- cor.mtest(subset_data)
+
+# Create a function to format the correlations with asterisks and p-values
+format_correlation <- function(cor, p) {
+  stars <- ifelse(p < 0.001, "***", ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "")))
+  paste0(sprintf("%.2f", cor), stars, " (", format(p, digits = 2), ")")
+}
+
+# Apply the function to format the entire correlation matrix
+formatted_cor_matrix <- matrix(NA, nrow = nrow(cor_matrix), ncol = ncol(cor_matrix))
+for (i in 1:nrow(cor_matrix)) {
+  for (j in 1:ncol(cor_matrix)) {
+    if (i != j) {
+      formatted_cor_matrix[i, j] <- format_correlation(cor_matrix[i, j], p_matrix[i, j])
+    } else {
+      formatted_cor_matrix[i, j] <- "-"
+    }
+  }
+}
+
+# Extract the lower triangle of the correlation matrix
+lower_triangle <- formatted_cor_matrix
+lower_triangle[upper.tri(lower_triangle, diag = TRUE)] <- ""
+
+# Convert lower_triangle to a data frame and add variable names
+lower_triangle_df <- as.data.frame(lower_triangle)
+colnames(lower_triangle_df) <- selected_vars
+rownames(lower_triangle_df) <- selected_vars
+
+# Calculate means and standard deviations
+means <- round(sapply(subset_data, mean, na.rm = TRUE), 2)
+sds <- round(sapply(subset_data, sd, na.rm = TRUE), 2)
+
+# Create a data frame for descriptive statistics
+desc_stats <- data.frame(Variable = selected_vars, Mean = means, SD = sds)
+
+# Combine the descriptive statistics and the lower triangle correlation matrix
+desc_stats_with_corr <- cbind(desc_stats, lower_triangle_df)
+rownames(desc_stats_with_corr) <- NULL
+
+# Print the final table
+print(desc_stats_with_corr)
+
+# save 
+write.csv(desc_stats_with_corr, file.path(path, "clean/output/spearman_correlation_table_FullSample_all_with_pvalues_T1.csv"), row.names = FALSE)
+
+
+# Output the table in a formatted view
+kable(desc_stats_with_corr, format = "pandoc", caption = "Descriptive Statistics, Spearman Correlations, and P-values")
+
+```
+
 
 ## 4. Trait Measures: Changes Over Time
 
@@ -600,7 +739,7 @@ tab_model(fitH2,
 
 ```
 
-### 4.2.2. BF: Loneliness and Social Connectedness
+### 4.2.2. Bayes Factors: Loneliness and Social Connectedness
 
 
 ```{r, message = FALSE}
@@ -720,56 +859,85 @@ print(results)
 
 ```{r, message = FALSE}
 library(ggplot2)
-library(cowplot)
+library(dplyr)
+library(ggExtra)
+library(scico)
 
-# Update GroupID labels
-loneliness_data <- dfB_all_long %>%
-  mutate(GroupID_label = ifelse(GroupID == 0.5, "LKM", "PMR")) %>%
-  select(SubID, time, GroupID_label, loneliness_mean)
+# ===== knobs =====
+gap <- 0.10        # smaller = closer T1–T3
+density_size <- 8  # lower = thinner density panel (try 3–5)
+density_alpha <- 0.6
+aspect_ratio <- 0.7  # >1 = taller & thinner overall look
+# ==================
 
-# Main scatter and line plot for loneliness
-loneliness_plot <- ggplot(loneliness_data, aes(x = time, y = loneliness_mean, group = GroupID_label, color = GroupID_label)) +
-  stat_summary(fun = mean, geom = "line", aes(linetype = GroupID_label), size = 1.2) + 
-  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.15, size = 0.8, color = "black") + 
-  geom_jitter(width = 0.1, alpha = 0.4, aes(color = GroupID_label), size = 1.5, show.legend = FALSE) + 
-  theme_apa() + 
+# Prepare data
+df_tmp <- dfB_all_long %>%
+  mutate(
+    GroupID_label = ifelse(GroupID == 0.5, "LKM", "PMR"),
+    time_chr = case_when(
+      is.numeric(time)        ~ paste0("T", as.integer(time)),
+      grepl("^T?\\d+$", time) ~ ifelse(grepl("^T", time), time, paste0("T", time)),
+      TRUE                    ~ as.character(time)
+    )
+  )
+
+levs <- c("T1","T2","T3")
+pos  <- setNames(1 + (0:(length(levs)-1))*gap, levs)
+
+loneliness_data <- df_tmp %>%
+  mutate(
+    time_f   = factor(time_chr, levels = levs),
+    time_num = unname(pos[as.character(time_chr)])
+  ) %>%
+  filter(!is.na(time_num), !is.na(loneliness_mean)) %>%
+  select(SubID, time_f, time_num, GroupID_label, loneliness_mean)
+
+# Shared y range
+ymin <- min(loneliness_data$loneliness_mean, na.rm = TRUE)
+ymax <- max(loneliness_data$loneliness_mean, na.rm = TRUE)
+yrange <- c(ymin - 0.05, ymax + 0.05)
+
+# Main plot
+p_main <- ggplot(
+  loneliness_data,
+  aes(x = time_num, y = loneliness_mean,
+      group = GroupID_label, color = GroupID_label)
+) +
+  stat_summary(fun = mean, geom = "line", aes(linetype = GroupID_label), size = 1.1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar",
+               width = gap/6, size = 0.4, color = "black") +  # <<< smaller SE bars
+  geom_jitter(width = gap/4, alpha = 0.4, size = 1.4, show.legend = FALSE) +
+  papaja::theme_apa() +
   labs(
     x = "Time",
     y = "Loneliness Mean Score",
     linetype = "Group",
     color = "Group"
   ) +
-  scale_x_discrete(labels = c("T1", "T2", "T3")) + 
-  scale_color_manual(values = c("hotpink", "blue")) +
+  scale_color_manual(values = c("hotpink", "blue")) + scale_x_continuous(
+    breaks = unname(pos), labels = names(pos),
+    limits = c(min(pos) - gap*0.5, max(pos) + gap*0.5),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  coord_cartesian(ylim = yrange) +
   theme(
     legend.position = "bottom",
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10),
-    plot.margin = margin(5, 5, 5, 5)
+    plot.margin = margin(2, 2, 2, 2),
+    aspect.ratio = aspect_ratio
   )
 
-# Rotated density plot
-density_plot <- ggplot(loneliness_data, aes(y = loneliness_mean, fill = GroupID_label)) +
-  geom_density(alpha = 0.6) +
-  scale_fill_manual(values = c("hotpink", "blue")) +
-  theme_void() +
-  theme(
-    legend.position = "none",
-    plot.margin = margin(0, -20, 0, 0)  # Add negative margin on the left
-  )
-
-# Combine the main plot and density plot
-combined_plot <- plot_grid(
-  loneliness_plot, density_plot,
-  ncol = 2,
-  rel_widths = c(0.8, 0.2),  # Keep proportions unchanged
-  align = "vh",              # Align both vertically and horizontally
-  axis = "tb"                # Ensure x-axis and y-axis alignment
+# Add slim right-side density aligned with y
+p_final <- ggMarginal(
+  p_main,
+  type = "density",
+  margins = "y",
+  size = density_size,
+  groupColour = TRUE,
+  groupFill = TRUE,
+  alpha = density_alpha
 )
 
-# Display the combined plot
-print(combined_plot)
+print(p_final)
 
 
 
@@ -837,7 +1005,7 @@ tab_model(fitH1g_1_contrast, file = "fit1H1g_T3.html",
 
 ```
 
-### 4.3.2. BF: IRI and subscales over time
+### 4.3.2. Bayes Factors: IRI and subscales over time
 
 ```{r, message = FALSE}
 
@@ -958,7 +1126,7 @@ tab_model(fit_ios_stranger, file = "fit_ios_stranger.html",
 
 ```
 
-### 4.4.2. BF: IOS mean and stranger over time 
+### 4.4.2. Bayes Factors: IOS mean and stranger over time 
 
 ```{r, message = FALSE}
 
@@ -1425,6 +1593,217 @@ tab_model(lm(socialConnectedness_mean_T2 ~ age + Male + Other + YesCollegeDegree
           show.se = T, 
           show.stat = T, 
           show.std = T)
+
+
+# unpleasantness 
+
+tab_model(lm(loneliness_mean_T2 ~ age + Male + Other + YesCollegeDegree + GroupID + traitEmpathyIRI_EC_mean_T2, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+tab_model(lm(socialConnectedness_mean_T2 ~  traitEmpathyIRI_PT_mean_T2, data = dfS_noT3), 
+          show.df = T, 
+          show.aic = T, 
+          show.se = T, 
+          show.stat = T, 
+          show.std = T)
+
+```
+
+#### 6.2. Plots
+
+regression plot
+
+```{r, message = FALSE}
+
+# ============================
+# Scatterplot matrix (tight) with:
+#  - Upper: standardized β (with covariates)
+#  - Lower: red sig stars on the regression line
+#  - Diagonal: histograms with labels
+# ============================
+
+library(GGally)
+library(ggplot2)
+library(dplyr)
+
+# --------------------------
+# Variables, labels, covariates
+# --------------------------
+vars <- c(
+  "loneliness_mean_T2",
+  "socialConnectedness_mean_T2",
+  "stateEmp_painRating",
+  "stateEmp_painUnpleasant",
+  "stateEmp_fear",
+  "painRatingOther",
+  "other_fearOfPain",
+  "other_unpleasantPain"
+  
+)
+
+labels_pretty <- c(
+  loneliness_mean_T2          = "Loneliness",
+  socialConnectedness_mean_T2 = "Social Connectedness",
+  stateEmp_painRating         = "State Empathy (Pain)",
+  stateEmp_painUnpleasant     = "State Empathy (Unpleasant)",
+  stateEmp_fear               = "State Empathy (Fear)",
+  painRatingSelf              = "Self Rating (Pain)",
+  painRatingOther             = "Other Rating (Pain)",
+  self_unpleasantPain         = "Self Rating (Unpleasant)",
+  other_unpleasantPain        = "Other Rating (Unpleasant)",
+  self_fearOfPain             = "Self Rating (Fear)",
+  other_fearOfPain            = "Other Rating (Fear)"
+)
+
+# Categorical/binary covariates (leave as-is)
+covars_cat  <- c("Male","Other","YesCollegeDegree","GroupID")
+# Continuous covariates to mean-center
+covars_cont <- c("age")
+
+# Build analysis frame and mean-center continuous covariates
+dat <- dfS_noT3 |>
+  dplyr::select(all_of(unique(c(vars, covars_cat, covars_cont)))) |>
+  mutate(across(all_of(covars_cont),
+                ~ as.numeric(scale(., center = TRUE, scale = FALSE)),
+                .names = "{.col}_c")) |>
+  drop_na()
+
+# Use centered names in models
+covars <- c(paste0(covars_cont, "_c"), covars_cat)
+
+# --------------------------
+# Compact aesthetics
+# --------------------------
+SIZE_PT   <- 0.9 # points
+SIZE_LINE <- 0.4   # lm line
+SIZE_TXT  <- 2.3   # upper β text
+SIZE_DIAG <- 7   # diagonal labels
+SIZE_STAR <- 3.5   # lower-star size (a bit bigger, as requested)
+BINS      <- 7
+
+starify <- function(p) ifelse(p < .001,"***",
+                         ifelse(p < .01,"**",
+                         ifelse(p < .05,"*","")))
+
+# --------------------------
+# Panel functions
+# --------------------------
+
+# Upper: standardized beta for X in scale(Y) ~ scale(X) + covars
+upper_beta <- function(data, mapping, ...){
+  yv <- as_label(mapping$y)
+  xv <- as_label(mapping$x)
+
+  rhs <- paste0("scale(", xv, ")",
+                if (length(covars)) paste0(" + ", paste(covars, collapse = " + ")) else "")
+  fml <- as.formula(paste0("scale(", yv, ") ~ ", rhs))
+
+  fit <- try(lm(fml, data = data, na.action = na.exclude), silent = TRUE)
+
+  lab <- "β = NA"
+  if (!inherits(fit, "try-error")) {
+    nm <- paste0("scale(", xv, ")")
+    sm <- summary(fit)$coefficients
+    if (nm %in% rownames(sm)) {
+      b    <- unname(sm[nm, "Estimate"])
+      pval <- unname(sm[nm, "Pr(>|t|)"])
+      lab  <- sprintf("\u03b2 = %.2f %s", b, starify(pval))
+    }
+  }
+
+  ggplot() +
+    annotate("text", x = 0.5, y = 0.5, label = lab,
+             size = SIZE_TXT, fontface = "bold") +
+    theme_void()
+}
+
+# Lower: scatter + LM line; red sig stars ON the fitted line at its midpoint
+lower_scatter_with_stars <- function(data, mapping, ...){
+  x <- GGally::eval_data_col(data, mapping$x)
+  y <- GGally::eval_data_col(data, mapping$y)
+
+  # Midpoint of the panel (in data coords)
+  xr <- range(x, na.rm = TRUE)
+  yr <- range(y, na.rm = TRUE)
+  xmid <- mean(xr)
+
+  fit <- try(lm(y ~ x), silent = TRUE)
+  stars <- ""
+  y_on_line <- mean(yr)  # fallback
+
+  if (!inherits(fit, "try-error")) {
+    sm <- summary(fit)$coefficients
+    if ("x" %in% rownames(sm)) {
+      pval     <- unname(sm["x", "Pr(>|t|)"])
+      stars    <- ifelse(pval < .001,"***",
+                   ifelse(pval < .01,"**",
+                   ifelse(pval < .05,"*","")))
+      y_on_line <- as.numeric(predict(fit, newdata = data.frame(x = xmid)))
+    }
+  }
+
+  ggplot(data, mapping) +
+    geom_point(size = SIZE_PT, alpha = 0.75, color = "#E86A33") +
+    geom_smooth(method = "lm", se = FALSE, linewidth = SIZE_LINE, color = "grey30") +
+    # place stars at the CENTER on the fitted line
+    annotate("text", x = xmid, y = y_on_line, label = stars,
+             vjust = -0.2, size = SIZE_STAR, fontface = "bold", color = "blue") +
+    # small padding so no points/line get clipped by the panel box
+    scale_x_continuous(expand = expansion(mult = c(0.06, 0.06))) +
+    scale_y_continuous(expand = expansion(mult = c(0.06, 0.06))) +
+    coord_cartesian(clip = "on") +
+    theme_minimal(base_size = 7) +
+    theme(
+      panel.grid = element_blank(),
+      axis.title = element_blank(),
+      axis.text  = element_text(size = 5),
+      axis.ticks = element_line(linewidth = 0.2)
+    )
+}
+
+# Diagonal: compact histogram + label inside
+diag_hist_label <- function(data, mapping, ...){
+  varname <- as_label(mapping$x)
+  ggplot(data, mapping) +
+    geom_histogram(bins = BINS, fill = "#9FD0E4", color = "white", linewidth = 0.25) +
+    annotate("text", x = -Inf, y = Inf,
+             hjust = -0.03, vjust = 1.25,
+             label = labels_pretty[varname],
+             size = 1.2, fontface = "bold") +
+    theme_minimal(base_size = 7) +
+    theme(
+      panel.grid = element_blank(),
+      axis.title = element_blank(),
+      axis.text  = element_blank(),
+      axis.ticks = element_blank()
+    )
+}
+
+# --------------------------
+# Build and tighten plot
+# --------------------------
+p <- ggpairs(
+  dat,
+  columns = match(vars, colnames(dat)),
+  upper = list(continuous = wrap(upper_beta)),
+  lower = list(continuous = wrap(lower_scatter_with_stars)),
+  diag  = list(continuous = wrap(diag_hist_label)),
+  labeller = as_labeller(labels_pretty)
+)
+
+p <- p +
+  theme(
+    strip.text    = element_blank(),
+    panel.border  = element_rect(color = "grey40", fill = NA, linewidth = 0.3),
+    panel.spacing = unit(0.14, "lines"),
+    plot.title    = element_blank()
+  )
+
+p
 
 
 ```
